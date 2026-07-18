@@ -20,11 +20,6 @@ export async function navigateToPassage(reference: string): Promise<LogosCommand
   return openUrl(`logos4:///Bible/${logosRef}`);
 }
 
-export async function searchBibleInLogos(query: string): Promise<LogosCommandResult> {
-  const encoded = encodeURIComponent(query);
-  return openUrl(`logos4:///Search?type=Bible&q=${encoded}`);
-}
-
 export async function openWordStudy(word: string): Promise<LogosCommandResult> {
   const encoded = encodeURIComponent(word);
   return openUrl(`logos4:///WordStudy?word=${encoded}`);
@@ -70,16 +65,4 @@ export async function openGuide(
 export async function searchAll(query: string): Promise<LogosCommandResult> {
   const encoded = encodeURIComponent(query);
   return openUrl(`logos4:///Search?kind=AllSearch&syntax=v2&q=${encoded}`);
-}
-
-export async function isLogosRunning(): Promise<boolean> {
-  try {
-    const { stdout } = await execFileAsync("osascript", [
-      "-e",
-      'tell application "System Events" to (name of processes) contains "Logos"',
-    ]);
-    return stdout.trim() === "true";
-  } catch {
-    return false;
-  }
 }

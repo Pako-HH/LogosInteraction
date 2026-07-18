@@ -5,17 +5,18 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that c
 ## What This Does
 
 - **20 MCP tools** that let Claude read Bible text, search Scripture, navigate Logos, access your notes/highlights/favorites, check reading plans, explore word studies and factbook entries, search your library catalog, open commentaries and lexicons, and run cross-resource searches
+- **16 of the 20 tools work entirely from local data** (your Logos SQLite databases, the local library catalog, and local reference logic) — no external API key required. Only `get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references` depend on the Biblia API for actual Bible text content/full-text search
 - **A Socratic Bible Study agent** that guides you through Scripture using questions (not lectures), welcoming any denominational background, with four questioning layers: Observation, Interpretation, Correlation, and Application
 
 ## Prerequisites
 
 | Requirement | Details |
 |-------------|---------|
-| **macOS** | Required (uses macOS `open` command and AppleScript for Logos integration) |
+| **macOS** | Required (uses the macOS `open` command with `logos4:`/`logosres:` URL schemes for Logos integration) |
 | **Logos Bible Software** | Installed at `/Applications/Logos.app` (tested with v48) |
 | **Node.js** | v18+ (v23+ recommended for native `fetch` support) |
 | **Claude Code** | Anthropic's CLI tool ([install guide](https://docs.anthropic.com/en/docs/claude-code)) |
-| **Biblia API Key** | Free key from [bibliaapi.com](https://bibliaapi.com/) |
+| **Biblia API Key** | Free key from [bibliaapi.com](https://bibliaapi.com/) — only needed for 4 tools (`get_bible_text`, `get_passage_context`, `search_bible`, `get_cross_references`); the other 16 tools work without it |
 
 ## Setup
 
@@ -78,10 +79,10 @@ Tools for retrieving, reading, and comparing Bible text
 
 | Tool | What it does |
 |------|-------------|
-| `get_bible_text` | Retrieves passage text (LEB default; also KJV, ASV, DARBY, YLT, WEB) |
-| `get_passage_context` | Gets a passage with surrounding verses for context |
-| `compare_passages` | Compares two Bible references for overlap, subset, or ordering |
-| `get_available_bibles` | Lists all Bible versions available for text retrieval |
+| `get_bible_text` | Retrieves passage text via the Biblia API (LEB default; also KJV, ASV, DARBY, YLT, WEB) — **requires `BIBLIA_API_KEY`** |
+| `get_passage_context` | Gets a passage with surrounding verses for context — **requires `BIBLIA_API_KEY`** (calls `get_bible_text` internally) |
+| `compare_passages` | Compares two Bible references for overlap, subset, or ordering — pure local reference logic, no API key needed |
+| `get_available_bibles` | Lists Bible translations installed in your local Logos library, read from the local catalog — no API key needed. Note: not every listed translation can be retrieved by `get_bible_text` (Biblia only covers LEB/KJV/ASV/DARBY/YLT/WEB) |
 
 ### Navigation & UI
 Tools that open things in the Logos desktop app
@@ -99,10 +100,10 @@ Tools for searching Bible text and library resources
 
 | Tool | What it does |
 |------|-------------|
-| `search_bible` | Searches Bible text for words, phrases, or topics |
-| `get_cross_references` | Finds related passages by extracting key terms |
-| `scan_references` | Finds Bible references embedded in arbitrary text |
-| `search_all` | Searches across ALL resources in your library (not just Bible text) |
+| `search_bible` | Searches Bible text for words, phrases, or topics via the Biblia API — **requires `BIBLIA_API_KEY`** |
+| `get_cross_references` | Finds related passages by extracting key terms — **requires `BIBLIA_API_KEY`** (calls `get_bible_text` and `search_bible` internally) |
+| `scan_references` | Finds Bible references embedded in arbitrary text (English and German book names) — local text scanning, no API key needed |
+| `search_all` | Searches across ALL resources in your library (not just Bible text) — opens the search in the Logos UI |
 
 ### Library & Resources
 Tools for browsing your owned library catalog
@@ -165,34 +166,40 @@ LogosInteraction/
 │   ├── tsconfig.json
 │   ├── src/
 │   │   ├── index.ts                   # MCP server entry point (20 tools)
-│   │   ├── config.ts                  # Paths, API config, constants
+│   │   ├── config.ts                  # Paths (with install-dir autodetection), API config, constants
 │   │   ├── types.ts                   # Shared TypeScript types
+│   │   ├── data/
+│   │   │   └── versification.ts       # Bundled book/chapter/verse table for local reference comparison
 │   │   └── services/
 │   │       ├── reference-parser.ts    # Bible reference normalization
+│   │       ├── reference-compare.ts   # Local passage comparison logic (compare_passages)
+│   │       ├── reference-scanner.ts   # Local reference scanning in free text (scan_references)
 │   │       ├── biblia-api.ts          # Biblia.com REST API client
-│   │       ├── logos-app.ts           # macOS URL scheme / AppleScript
+│   │       ├── logos-app.ts           # macOS URL scheme integration
 │   │       ├── sqlite-reader.ts       # Read-only Logos SQLite access
-│   │       └── catalog-reader.ts     # Library catalog search (catalog.db)
+│   │       └── catalog-reader.ts      # Library catalog search (catalog.db)
 │   └── dist/                          # Built output (after npm run build)
 ```
 
 ## How It Works
 
-The MCP server integrates with Logos through three channels:
+The MCP server integrates with Logos through four channels:
 
-- **Biblia API** - Retrieves Bible text and search results via the free REST API from Faithlife (same company as Logos)
+- **Biblia API** - Retrieves Bible text and full-text search results via the free REST API from Faithlife (same company as Logos). Used only by `get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references`
 - **macOS URL schemes** - Opens passages, word studies, and factbook entries directly in the Logos app using `logos4:///` URLs
 - **SQLite databases** - Reads your personal data (notes, highlights, favorites, workflows, reading plans) and library catalog directly from the Logos local database files (read-only access, never modifies your data)
+- **Local reference logic** - `compare_passages` and `scan_references` work entirely offline using built-in reference parsing and a bundled versification table (no Bible text or API access needed)
 
 ## Logos Data Path
 
-The server expects Logos data at:
+The server automatically detects your Logos installation folder under:
 
 ```
-~/Library/Application Support/Logos4/Documents/a3wo155q.w14/
+~/Library/Application Support/Logos4/Documents/<your-install-id>/
+~/Library/Application Support/Logos4/Data/<your-install-id>/
 ```
 
-If your Logos data is at a different path, set the `LOGOS_DATA_DIR` environment variable in `.mcp.json`. The library catalog lives under `Data/` (not `Documents/`) — set `LOGOS_CATALOG_DIR` if your catalog path differs:
+Logos generates a unique per-machine install ID for these folders, so no manual configuration is normally needed. If detection picks the wrong folder (e.g. multiple Logos profiles on one machine) or your data lives somewhere else, override it by setting `LOGOS_DATA_DIR` in `.mcp.json`. The library catalog lives under `Data/` (not `Documents/`) — set `LOGOS_CATALOG_DIR` if your catalog path differs:
 
 ```json
 {
