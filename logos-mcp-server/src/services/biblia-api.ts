@@ -1,5 +1,5 @@
 import { BIBLIA_API_KEY, BIBLIA_API_BASE, DEFAULT_BIBLE } from "../config.js";
-import type { BibleTextResult, BibleSearchResult, BibleSearchHit, ScanResult, CompareResult, BibleInfo } from "../types.js";
+import type { BibleTextResult, BibleSearchResult, BibleSearchHit } from "../types.js";
 
 const BIBLIA_TIMEOUT_MS = 10_000;
 
@@ -75,59 +75,4 @@ export async function searchBible(
       preview: r.preview ?? "",
     })),
   };
-}
-
-export async function parsePassage(text: string): Promise<string> {
-  const data = await bibliaFetch("/parse", { passage: text }) as { passage: string };
-  return data.passage ?? text;
-}
-
-// ─── Scan References ────────────────────────────────────────────────────────
-
-export async function scanReferences(
-  text: string,
-  tagChapters: boolean = true
-): Promise<ScanResult[]> {
-  const data = await bibliaFetch("/scan", {
-    text,
-    tagChapters: String(tagChapters),
-  }) as { results: Array<{ passage: string; textIndex: number; textLength: number }> };
-
-  return (data.results ?? []).map((r) => ({ passage: r.passage }));
-}
-
-// ─── Compare Passages ───────────────────────────────────────────────────────
-
-export async function comparePassages(
-  first: string,
-  second: string
-): Promise<CompareResult> {
-  const data = await bibliaFetch("/compare", {
-    first,
-    second,
-  }) as CompareResult;
-
-  return {
-    equal: data.equal ?? false,
-    intersects: data.intersects ?? false,
-    subset: data.subset ?? false,
-    superset: data.superset ?? false,
-    before: data.before ?? false,
-    after: data.after ?? false,
-  };
-}
-
-// ─── Get Available Bibles ───────────────────────────────────────────────────
-
-export async function getAvailableBibles(
-  query?: string
-): Promise<BibleInfo[]> {
-  const params: Record<string, string> = {};
-  if (query) {
-    params.query = query;
-  }
-
-  const data = await bibliaFetch("/find", params) as { bibles: BibleInfo[] };
-
-  return data.bibles ?? [];
 }

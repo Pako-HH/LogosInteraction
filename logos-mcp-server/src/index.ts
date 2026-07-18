@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { SERVER_NAME, SERVER_VERSION } from "./config.js";
+import { SERVER_NAME, SERVER_VERSION, DEFAULT_BIBLE } from "./config.js";
 
 // Service imports
-import { getBibleText, searchBible } from "./services/biblia-api.js";
 import { navigateToPassage, openWordStudy, openFactbook, openResource, openGuide, searchAll } from "./services/logos-app.js";
 import { expandRange } from "./services/reference-parser.js";
 import { compareReferences } from "./services/reference-compare.js";
@@ -19,7 +19,27 @@ import {
   getReadingProgress,
   getUserNotes,
 } from "./services/sqlite-reader.js";
-import { searchCatalog, getResourceTypeSummary, typeLabel, getInstalledBibles } from "./services/catalog-reader.js";
+import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
+
+// Provider imports (Phase A — provider abstraction, no behavior change;
+// see docs/16_MCP2_Zielarchitektur.md). Biblia remains the sole active
+// source for the 4 still-dependent tools; no resolver/fallback logic yet.
+import type { BibleTextProvider } from "./services/providers/bible-text-provider.js";
+import { BibliaBibleTextProvider } from "./services/providers/biblia-bible-text-provider.js";
+import type { SearchProvider } from "./services/providers/search-provider.js";
+import { BibliaSearchProvider } from "./services/providers/biblia-search-provider.js";
+import type { CrossReferenceProvider } from "./services/providers/cross-reference-provider.js";
+import { HeuristicCrossReferenceProvider } from "./services/providers/heuristic-cross-reference-provider.js";
+import type { TranslationProvider } from "./services/providers/translation-provider.js";
+import { LocalTranslationProvider } from "./services/providers/local-translation-provider.js";
+
+const bibleTextProvider: BibleTextProvider = new BibliaBibleTextProvider();
+const searchProvider: SearchProvider = new BibliaSearchProvider();
+const crossReferenceProvider: CrossReferenceProvider = new HeuristicCrossReferenceProvider(
+  bibleTextProvider,
+  searchProvider
+);
+const translationProvider: TranslationProvider = new LocalTranslationProvider();
 
 function text(s: string) {
   return { content: [{ type: "text" as const, text: s }] };
@@ -29,7 +49,12 @@ function err(s: string) {
   return { content: [{ type: "text" as const, text: s }], isError: true as const };
 }
 
-async function main() {
+// Builds and returns the fully configured MCP server (all 20 tools
+// registered), without connecting any transport. Split out of main() so
+// tests can connect an in-memory transport instead of stdio — the real
+// CLI entry point below is unaffected, it just calls this and then
+// connects StdioServerTransport as before.
+export function createServer(): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
   // ── 1. navigate_passage ──────────────────────────────────────────────────
@@ -54,7 +79,7 @@ async function main() {
       bible: z.string().optional().describe("Bible version: LEB, KJV, ASV, DARBY, YLT, WEB"),
     },
     async ({ passage, bible }) => {
-      const result = await getBibleText(passage, bible);
+      const result = await bibleTextProvider.resolveText(passage, bible ?? DEFAULT_BIBLE);
       return text(`**${result.passage}** (${result.bible})\n\n${result.text}`);
     }
   );
@@ -70,7 +95,7 @@ async function main() {
     },
     async ({ passage, context_verses, bible }) => {
       const expanded = expandRange(passage, context_verses ?? 5);
-      const result = await getBibleText(expanded, bible);
+      const result = await bibleTextProvider.resolveText(expanded, bible ?? DEFAULT_BIBLE);
       return text(`**${result.passage}** (${result.bible}) — context around ${passage}\n\n${result.text}`);
     }
   );
@@ -85,7 +110,7 @@ async function main() {
       bible: z.string().optional().describe("Bible version (default: LEB)"),
     },
     async ({ query, limit, bible }) => {
-      const result = await searchBible(query, { limit, bible });
+      const result = await searchProvider.search(query, { limit, bible });
       if (result.resultCount === 0) return text(`No results for "${query}".`);
       const lines = result.results.map((r) => `**${r.title}**: ${r.preview}`);
       return text(`Found ${result.resultCount} results for "${query}":\n\n${lines.join("\n\n")}`);
@@ -101,33 +126,9 @@ async function main() {
       key_terms: z.string().optional().describe("Specific terms to search instead of auto-extracting"),
     },
     async ({ passage, key_terms }) => {
-      let searchQuery: string;
-      if (key_terms) {
-        searchQuery = key_terms;
-      } else {
-        const passageResult = await getBibleText(passage);
-        const stopWords = new Set([
-          "the","a","an","and","or","but","in","on","at","to","for","of","with",
-          "by","from","is","are","was","were","be","been","have","has","had","do",
-          "does","did","will","would","could","should","may","might","shall","that",
-          "this","these","those","it","its","he","she","they","them","his","her",
-          "their","not","no","nor","as","if","then","than","so","all","who","which",
-          "what","when","where","how","i","me","my","we","us","you","your","him",
-          "up","out","into","upon",
-        ]);
-        const words = passageResult.text
-          .replace(/[^\w\s]/g, "")
-          .split(/\s+/)
-          .filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase()))
-          .slice(0, 5);
-        searchQuery = words.join(" ");
-      }
-      const results = await searchBible(searchQuery, { limit: 15 });
-      const filtered = results.results.filter(
-        (r) => r.title.toLowerCase() !== passage.toLowerCase()
-      );
-      if (filtered.length === 0) return text(`No cross-references found for ${passage}.`);
-      const lines = filtered.map((r) => `**${r.title}**: ${r.preview}`);
+      const result = await crossReferenceProvider.findCrossReferences(passage, key_terms);
+      if (result.results.length === 0) return text(`No cross-references found for ${passage}.`);
+      const lines = result.results.map((r) => `**${r.title}**: ${r.preview}`);
       return text(`Cross-references for **${passage}**:\n\n${lines.join("\n\n")}`);
     }
   );
@@ -386,7 +387,7 @@ async function main() {
     },
     async ({ query }) => {
       try {
-        const bibles = getInstalledBibles(query);
+        const bibles = await translationProvider.listAvailable(query);
         if (bibles.length === 0) return text("No Bible translations found in the local Logos library.");
         const lines = bibles.map((b) => {
           const langs = b.languages.length ? ` [${b.languages.join(", ")}]` : "";
@@ -419,12 +420,22 @@ async function main() {
     }
   );
 
-  // ── Start server ─────────────────────────────────────────────────────────
+  return server;
+}
+
+async function main() {
+  const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+// Only auto-run when this file is the process entry point (`node dist/index.js`
+// or `tsx src/index.ts`) — not when imported as a module (e.g. by tests
+// importing createServer()). Equivalent to Node's `require.main === module`
+// for ESM.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}
