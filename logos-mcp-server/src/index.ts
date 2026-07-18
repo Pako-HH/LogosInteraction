@@ -6,9 +6,10 @@ import { z } from "zod";
 import { SERVER_NAME, SERVER_VERSION } from "./config.js";
 
 // Service imports
-import { getBibleText, searchBible, scanReferences, comparePassages } from "./services/biblia-api.js";
+import { getBibleText, searchBible, scanReferences } from "./services/biblia-api.js";
 import { navigateToPassage, openWordStudy, openFactbook, openResource, openGuide, searchAll } from "./services/logos-app.js";
 import { expandRange } from "./services/reference-parser.js";
+import { compareReferences } from "./services/reference-compare.js";
 import {
   getUserHighlights,
   getFavorites,
@@ -363,7 +364,7 @@ async function main() {
       second: z.string().describe("Second Bible reference (e.g., 'Romans 8:29')"),
     },
     async ({ first, second }) => {
-      const result = await comparePassages(first, second);
+      const result = compareReferences(first, second);
       const relations: string[] = [];
       if (result.equal) relations.push("equal");
       if (result.intersects) relations.push("intersects");
