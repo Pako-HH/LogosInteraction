@@ -6,10 +6,11 @@ import { z } from "zod";
 import { SERVER_NAME, SERVER_VERSION } from "./config.js";
 
 // Service imports
-import { getBibleText, searchBible, scanReferences } from "./services/biblia-api.js";
+import { getBibleText, searchBible } from "./services/biblia-api.js";
 import { navigateToPassage, openWordStudy, openFactbook, openResource, openGuide, searchAll } from "./services/logos-app.js";
 import { expandRange } from "./services/reference-parser.js";
 import { compareReferences } from "./services/reference-compare.js";
+import { scanReferencesLocal } from "./services/reference-scanner.js";
 import {
   getUserHighlights,
   getFavorites,
@@ -342,13 +343,13 @@ async function main() {
   // ── 17. scan_references ───────────────────────────────────────────────────
   server.tool(
     "scan_references",
-    "Find Bible references in arbitrary text (e.g., extract all references from a paragraph)",
+    "Find Bible references in arbitrary text (e.g., extract all references from a paragraph). Recognizes English and German book names.",
     {
       text: z.string().describe("Text to scan for Bible references"),
       tag_chapters: z.boolean().optional().describe("Tag chapter-level references too (default: true)"),
     },
     async ({ text: inputText, tag_chapters }) => {
-      const results = await scanReferences(inputText, tag_chapters ?? true);
+      const results = scanReferencesLocal(inputText, tag_chapters ?? true);
       if (results.length === 0) return text("No Bible references found in the text.");
       const lines = results.map((r) => `- **${r.passage}**`);
       return text(`Found ${results.length} Bible references:\n\n${lines.join("\n")}`);

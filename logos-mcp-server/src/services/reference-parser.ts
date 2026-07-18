@@ -136,6 +136,77 @@ const ALIAS_TO_BOOK: Record<string, string> = {
   "Rev": "Revelation",
 };
 
+// German book names -> canonical (English) full name. Full names only (no
+// short abbreviations like "Ps" or "Mt") to keep the free-text scanner in
+// reference-scanner.ts precise — short tokens are more likely to collide
+// with ordinary German words and cause false-positive matches. Covers the
+// case documented in docs/08_Testprotokoll.md ("Siehe Johannes 3,16 und
+// Römer 8,28"), which the plain-English alias tables above cannot resolve.
+// Numbered books are listed both with and without the German ordinal period
+// ("1. Mose" and "1 Mose"), since both forms are common in German text.
+const GERMAN_ALIAS_TO_BOOK: Record<string, string> = {
+  "1 Mose": "Genesis", "1. Mose": "Genesis",
+  "2 Mose": "Exodus", "2. Mose": "Exodus",
+  "3 Mose": "Leviticus", "3. Mose": "Leviticus",
+  "4 Mose": "Numbers", "4. Mose": "Numbers",
+  "5 Mose": "Deuteronomy", "5. Mose": "Deuteronomy",
+  "Josua": "Joshua",
+  "Richter": "Judges",
+  "Rut": "Ruth",
+  "1 Könige": "1 Kings", "1. Könige": "1 Kings",
+  "2 Könige": "2 Kings", "2. Könige": "2 Kings",
+  "1 Chronik": "1 Chronicles", "1. Chronik": "1 Chronicles",
+  "2 Chronik": "2 Chronicles", "2. Chronik": "2 Chronicles",
+  "Esra": "Ezra",
+  "Nehemia": "Nehemiah",
+  "Ester": "Esther",
+  "Hiob": "Job",
+  "Psalmen": "Psalms",
+  "Sprüche": "Proverbs",
+  "Sprichwörter": "Proverbs",
+  "Prediger": "Ecclesiastes",
+  "Kohelet": "Ecclesiastes",
+  "Hohelied": "Song of Solomon",
+  "Hoheslied": "Song of Solomon",
+  "Jesaja": "Isaiah",
+  "Jeremia": "Jeremiah",
+  "Klagelieder": "Lamentations",
+  "Hesekiel": "Ezekiel",
+  "Ezechiel": "Ezekiel",
+  "Obadja": "Obadiah",
+  "Jona": "Jonah",
+  "Micha": "Micah",
+  "Habakuk": "Habakkuk",
+  "Zefanja": "Zephaniah",
+  "Sacharja": "Zechariah",
+  "Maleachi": "Malachi",
+  "Matthäus": "Matthew",
+  "Markus": "Mark",
+  "Lukas": "Luke",
+  "Johannes": "John",
+  "1 Johannes": "1 John", "1. Johannes": "1 John",
+  "2 Johannes": "2 John", "2. Johannes": "2 John",
+  "3 Johannes": "3 John", "3. Johannes": "3 John",
+  "Apostelgeschichte": "Acts",
+  "Römer": "Romans",
+  "1 Korinther": "1 Corinthians", "1. Korinther": "1 Corinthians",
+  "2 Korinther": "2 Corinthians", "2. Korinther": "2 Corinthians",
+  "Galater": "Galatians",
+  "Epheser": "Ephesians",
+  "Philipper": "Philippians",
+  "Kolosser": "Colossians",
+  "1 Thessalonicher": "1 Thessalonians", "1. Thessalonicher": "1 Thessalonians",
+  "2 Thessalonicher": "2 Thessalonians", "2. Thessalonicher": "2 Thessalonians",
+  "1 Timotheus": "1 Timothy", "1. Timotheus": "1 Timothy",
+  "2 Timotheus": "2 Timothy", "2. Timotheus": "2 Timothy",
+  "Hebräer": "Hebrews",
+  "Jakobus": "James",
+  "1 Petrus": "1 Peter", "1. Petrus": "1 Peter",
+  "2 Petrus": "2 Peter", "2. Petrus": "2 Peter",
+  "Judas": "Jude",
+  "Offenbarung": "Revelation",
+};
+
 // Build a case-insensitive lookup combining all name forms -> canonical name
 const NAME_LOOKUP: Map<string, string> = new Map();
 
@@ -152,6 +223,21 @@ for (const [alias, canonical] of Object.entries(ALIAS_TO_BOOK)) {
 // Add Logos abbreviations as aliases too
 for (const [abbr, canonical] of Object.entries(LOGOS_TO_BOOK)) {
   NAME_LOOKUP.set(abbr.toLowerCase(), canonical);
+}
+
+// Add German book names
+for (const [alias, canonical] of Object.entries(GERMAN_ALIAS_TO_BOOK)) {
+  NAME_LOOKUP.set(alias.toLowerCase(), canonical);
+}
+
+// All recognized book-name tokens (English + German, full names + aliases),
+// for consumers that need to build a whitelist-based text scanner (see
+// reference-scanner.ts) rather than parse a single, already-isolated
+// reference string.
+export const KNOWN_BOOK_TOKENS: string[] = Array.from(NAME_LOOKUP.keys());
+
+export function resolveKnownBookToken(token: string): string | null {
+  return NAME_LOOKUP.get(token.toLowerCase()) ?? null;
 }
 
 // ─── Canonical Book Order ───────────────────────────────────────────────────
