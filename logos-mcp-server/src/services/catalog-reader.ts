@@ -2,13 +2,38 @@ import Database from "better-sqlite3";
 import { existsSync } from "fs";
 import { DB_PATHS } from "../config.js";
 import { stripXml } from "../utils/strip-markup.js";
-import type { CatalogResource, ResourceTypeSummary } from "../types.js";
+import type { CatalogResource, ResourceTypeSummary, LocalBibleInfo } from "../types.js";
 
 function openDb(path: string): Database.Database {
   if (!existsSync(path)) {
     throw new Error(`Database not found: ${path}`);
   }
   return new Database(path, { readonly: true, fileMustExist: true });
+}
+
+// Opens the library catalog with error messages safe to show an end user:
+// no local filesystem paths (which embed the OS username) ever leak out.
+function openCatalogDbSafely(): Database.Database {
+  if (!existsSync(DB_PATHS.catalog)) {
+    throw new Error(
+      "Logos library catalog was not found. Make sure Logos Bible Software is installed and has been opened at least once on this machine."
+    );
+  }
+  try {
+    return new Database(DB_PATHS.catalog, { readonly: true, fileMustExist: true });
+  } catch {
+    throw new Error(
+      "Logos library catalog could not be opened. It may be corrupted, or locked by another process (e.g. Logos is currently syncing)."
+    );
+  }
+}
+
+function splitDelimited(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,;]/)
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
 }
 
 // ─── Human-friendly type labels ─────────────────────────────────────────────
@@ -194,6 +219,65 @@ export function getResourceTypeSummary(): ResourceTypeSummary[] {
     return Array.from(merged.entries())
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count);
+  } finally {
+    db.close();
+  }
+}
+
+// ─── Installed Bible Translations ───────────────────────────────────────────
+
+// Locally installed Bible translations, identified by catalog Type
+// "text.monograph.bible" (verified against the local catalog; no other Type
+// string was found to represent Bible text resources there).
+export function getInstalledBibles(query?: string): LocalBibleInfo[] {
+  const db = openCatalogDbSafely();
+  try {
+    let sql = `
+      SELECT ResourceId, Title, AbbreviatedTitle, Languages, Publishers
+      FROM Records
+      WHERE Type = 'text.monograph.bible' AND Availability >= 1 AND IsDataset = 0
+    `;
+    const params: unknown[] = [];
+
+    if (query) {
+      sql += " AND (Title LIKE ? OR AbbreviatedTitle LIKE ? OR Languages LIKE ?)";
+      const q = `%${query}%`;
+      params.push(q, q, q);
+    }
+
+    sql += " ORDER BY Title ASC";
+
+    let rows: Array<{
+      ResourceId: string;
+      Title: string;
+      AbbreviatedTitle: string | null;
+      Languages: string | null;
+      Publishers: string | null;
+    }>;
+    try {
+      rows = db.prepare(sql).all(...params) as typeof rows;
+    } catch (e) {
+      // better-sqlite3 defers file-format validation to the first statement
+      // (opening a non-database file does not throw), so we distinguish
+      // "not a valid database" from "schema doesn't match" here, by code.
+      const code = (e as { code?: string } | undefined)?.code;
+      if (code === "SQLITE_NOTADB" || code === "SQLITE_CORRUPT") {
+        throw new Error(
+          "Logos library catalog could not be read. It may be corrupted, or locked by another process (e.g. Logos is currently syncing)."
+        );
+      }
+      throw new Error(
+        "Logos library catalog has an unexpected structure for this Logos version (expected table/columns not found). This tool may need to be updated."
+      );
+    }
+
+    return rows.map((r) => ({
+      resourceId: r.ResourceId,
+      title: r.Title,
+      abbreviatedTitle: r.AbbreviatedTitle,
+      languages: splitDelimited(r.Languages),
+      publishers: splitDelimited(r.Publishers),
+    }));
   } finally {
     db.close();
   }

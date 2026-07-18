@@ -6,7 +6,7 @@ import { z } from "zod";
 import { SERVER_NAME, SERVER_VERSION } from "./config.js";
 
 // Service imports
-import { getBibleText, searchBible, scanReferences, comparePassages, getAvailableBibles } from "./services/biblia-api.js";
+import { getBibleText, searchBible, scanReferences, comparePassages } from "./services/biblia-api.js";
 import { navigateToPassage, openWordStudy, openFactbook, openResource, openGuide, searchAll } from "./services/logos-app.js";
 import { expandRange } from "./services/reference-parser.js";
 import {
@@ -17,7 +17,7 @@ import {
   getReadingProgress,
   getUserNotes,
 } from "./services/sqlite-reader.js";
-import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
+import { searchCatalog, getResourceTypeSummary, typeLabel, getInstalledBibles } from "./services/catalog-reader.js";
 
 function text(s: string) {
   return { content: [{ type: "text" as const, text: s }] };
@@ -378,18 +378,23 @@ async function main() {
   // ── 19. get_available_bibles ──────────────────────────────────────────────
   server.tool(
     "get_available_bibles",
-    "List all Bible versions available for text retrieval via the Biblia API",
+    "List Bible translations installed in the local Logos library. Note: not every locally installed translation can be retrieved via get_bible_text, which currently uses the Biblia API and only covers LEB, KJV, ASV, DARBY, YLT, and WEB.",
     {
-      query: z.string().optional().describe("Optional search query to filter Bible versions"),
+      query: z.string().optional().describe("Optional search query to filter by title or language"),
     },
     async ({ query }) => {
-      const bibles = await getAvailableBibles(query);
-      if (bibles.length === 0) return text("No Bible versions found.");
-      const lines = bibles.map((b) => {
-        const langs = b.languages?.length ? ` [${b.languages.join(", ")}]` : "";
-        return `- **${b.title}** (\`${b.bible}\`)${langs}`;
-      });
-      return text(`Found ${bibles.length} Bible versions:\n\n${lines.join("\n")}`);
+      try {
+        const bibles = getInstalledBibles(query);
+        if (bibles.length === 0) return text("No Bible translations found in the local Logos library.");
+        const lines = bibles.map((b) => {
+          const langs = b.languages.length ? ` [${b.languages.join(", ")}]` : "";
+          return `- **${b.title}** (\`${b.resourceId}\`)${langs}`;
+        });
+        return text(`Found ${bibles.length} Bible translations installed locally:\n\n${lines.join("\n")}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err(`Local library catalog error: ${msg}`);
+      }
     }
   );
 

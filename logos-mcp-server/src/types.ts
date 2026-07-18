@@ -137,6 +137,14 @@ export interface ResourceTypeSummary {
   count: number;
 }
 
+export interface LocalBibleInfo {
+  resourceId: string;
+  title: string;
+  abbreviatedTitle: string | null;
+  languages: string[];
+  publishers: string[];
+}
+
 // ─── Biblia Scan / Compare / Find Types ─────────────────────────────────────
 
 export interface ScanResult {
