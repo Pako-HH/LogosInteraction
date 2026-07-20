@@ -58,6 +58,11 @@ export const DB_PATHS = {
   clippings: join(LOGOS_DATA_DIR, "Documents", "Clippings", "Clippings.db"),
   passageLists: join(LOGOS_DATA_DIR, "Documents", "PassageList", "PassageList.db"),
   catalog: join(LOGOS_CATALOG_DIR, "LibraryCatalog", "catalog.db"),
+  // Phase 4D-1: lives under Data/ (LOGOS_CATALOG_DIR), not Documents/
+  // (LOGOS_DATA_DIR) — same root as `catalog` above, unlike every other
+  // entry in this object. Not yet read anywhere; getReadingProgress() still
+  // reads `readingLists` until 4D-1.2.
+  readingProgress: join(LOGOS_CATALOG_DIR, "ReadingProgressManager", "readingprogressmanager.db"),
 } as const;
 
 // ─── Biblia API ──────────────────────────────────────────────────────────────
