@@ -34,17 +34,24 @@ describe("get_bible_text (real MCP round-trip via createServer())", () => {
   });
 
   it("produces the exact pre-refactor markdown response for a passage lookup with an explicit bible", async () => {
+    // Uses LEB, not WEB: since Phase 3D-5, WEB/KJV/ASV resolve from the
+    // local corpus (BibleTextResolver → LocalBibleTextProvider) and never
+    // reach biblia-api.ts at all — see docs/22_Phase3D5_BibleTextResolver.md.
+    // LEB is not gemeinfrei (docs/15 Abschnitt 4) and will never be bundled
+    // locally, so it stays a stable choice for "this always goes through
+    // Biblia" regardless of whether a local corpus is present on the
+    // machine running this test.
     getBibleTextMock.mockResolvedValue({
       passage: "John 3:16",
       text: "For God so loved the world that he gave his only Son.",
-      bible: "WEB",
+      bible: "LEB",
     });
 
     const { client, server } = await connectedClient();
     try {
       const result = await client.callTool({
         name: "get_bible_text",
-        arguments: { passage: "John 3:16", bible: "WEB" },
+        arguments: { passage: "John 3:16", bible: "LEB" },
       });
 
       // Byte-identical to the format string that lived directly in index.ts
@@ -52,14 +59,14 @@ describe("get_bible_text (real MCP round-trip via createServer())", () => {
       expect(result.content).toEqual([
         {
           type: "text",
-          text: "**John 3:16** (WEB)\n\nFor God so loved the world that he gave his only Son.",
+          text: "**John 3:16** (LEB)\n\nFor God so loved the world that he gave his only Son.",
         },
       ]);
       expect(result.isError).toBeFalsy();
 
       // Confirms the provider layer actually reached biblia-api.ts with the
       // right arguments — not a hand-rolled stand-in for the real call chain.
-      expect(getBibleTextMock).toHaveBeenCalledExactlyOnceWith("John 3:16", "WEB");
+      expect(getBibleTextMock).toHaveBeenCalledExactlyOnceWith("John 3:16", "LEB");
     } finally {
       await client.close();
       await server.close();

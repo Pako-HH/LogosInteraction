@@ -21,11 +21,17 @@ import {
 } from "./services/sqlite-reader.js";
 import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
 
-// Provider imports (Phase A — provider abstraction, no behavior change;
-// see docs/16_MCP2_Zielarchitektur.md). Biblia remains the sole active
-// source for the 4 still-dependent tools; no resolver/fallback logic yet.
+// Provider imports (Phase A — provider abstraction; see
+// docs/16_MCP2_Zielarchitektur.md). Phase 3D-5: get_bible_text/
+// get_passage_context/get_cross_references now resolve WEB/KJV/ASV from the
+// local corpus first (LocalBibleTextProvider), falling back to Biblia only
+// for translations not available locally (e.g. LEB, the default — see
+// docs/22_Phase3D5_BibleTextResolver.md). search_bible is untouched, still
+// Biblia-only (no SearchResolver/LocalSearchProvider yet).
 import type { BibleTextProvider } from "./services/providers/bible-text-provider.js";
 import { BibliaBibleTextProvider } from "./services/providers/biblia-bible-text-provider.js";
+import { LocalBibleTextProvider } from "./services/providers/local-bible-text-provider.js";
+import { BibleTextResolver } from "./services/providers/bible-text-resolver.js";
 import type { SearchProvider } from "./services/providers/search-provider.js";
 import { BibliaSearchProvider } from "./services/providers/biblia-search-provider.js";
 import type { CrossReferenceProvider } from "./services/providers/cross-reference-provider.js";
@@ -33,7 +39,26 @@ import { HeuristicCrossReferenceProvider } from "./services/providers/heuristic-
 import type { TranslationProvider } from "./services/providers/translation-provider.js";
 import { LocalTranslationProvider } from "./services/providers/local-translation-provider.js";
 
-const bibleTextProvider: BibleTextProvider = new BibliaBibleTextProvider();
+// Constructing LocalBibleTextProvider opens the corpus file eagerly and
+// throws if it's missing/corrupt (Phase 3D-4). That's the right behavior
+// for a direct caller, but this instantiation runs at module load time —
+// letting it throw here would prevent the whole server from starting on a
+// machine that hasn't run `npm run build:corpus` yet. Degrade to
+// Biblia-only instead, exactly the pre-3D-5 behavior, rather than crash.
+function createLocalBibleTextProviderOrNull(): LocalBibleTextProvider | null {
+  try {
+    return new LocalBibleTextProvider();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`Local Bible corpus unavailable, falling back to Biblia only: ${msg}`);
+    return null;
+  }
+}
+
+const bibleTextProvider: BibleTextProvider = new BibleTextResolver(
+  createLocalBibleTextProviderOrNull(),
+  new BibliaBibleTextProvider()
+);
 const searchProvider: SearchProvider = new BibliaSearchProvider();
 const crossReferenceProvider: CrossReferenceProvider = new HeuristicCrossReferenceProvider(
   bibleTextProvider,
