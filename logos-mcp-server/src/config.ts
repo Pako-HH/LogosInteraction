@@ -64,7 +64,12 @@ export const DB_PATHS = {
 
 export const BIBLIA_API_KEY = process.env.BIBLIA_API_KEY ?? "";
 export const BIBLIA_API_BASE = "https://api.biblia.com/v1/bible";
-export const DEFAULT_BIBLE = "LEB";
+
+// Phase 4B: overridable so users with a built local corpus can opt into a
+// fully local default (e.g. "WEB") instead of LEB, which is never bundled
+// locally. `||` (not `??`) is deliberate: an empty or whitespace-only value
+// must also fall back to "LEB", not pass through as an invalid default.
+export const DEFAULT_BIBLE = process.env.DEFAULT_BIBLE?.trim() || "LEB";
 
 // ─── Local Bible Corpus (Phase 3D-2/3D-3 build output) ─────────────────────
 // Default resolves relative to this compiled file's own location (dist/config.js
