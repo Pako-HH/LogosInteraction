@@ -39,6 +39,8 @@ import { LocalSearchProvider } from "./services/providers/local-search-provider.
 import { SearchResolver } from "./services/providers/search-resolver.js";
 import type { CrossReferenceProvider } from "./services/providers/cross-reference-provider.js";
 import { HeuristicCrossReferenceProvider } from "./services/providers/heuristic-cross-reference-provider.js";
+import { LocalCrossReferenceProvider } from "./services/providers/local-cross-reference-provider.js";
+import { CrossReferenceResolver } from "./services/providers/cross-reference-resolver.js";
 import type { TranslationProvider } from "./services/providers/translation-provider.js";
 import { LocalTranslationProvider } from "./services/providers/local-translation-provider.js";
 
@@ -69,6 +71,20 @@ function createLocalSearchProviderOrNull(): LocalSearchProvider | null {
   }
 }
 
+// Phase 4C-5: same graceful-degradation rationale as the two helpers above —
+// LocalCrossReferenceProvider's constructor throws if the cross-reference
+// corpus file is missing (Phase 4C-3). Falls back to heuristic-only, i.e.
+// exactly the pre-4C-5 behavior, rather than crash server startup.
+function createLocalCrossReferenceProviderOrNull(bibleText: BibleTextProvider): LocalCrossReferenceProvider | null {
+  try {
+    return new LocalCrossReferenceProvider(bibleText);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`Local cross-reference corpus unavailable, falling back to heuristic search only: ${msg}`);
+    return null;
+  }
+}
+
 const bibleTextProvider: BibleTextProvider = new BibleTextResolver(
   createLocalBibleTextProviderOrNull(),
   new BibliaBibleTextProvider()
@@ -77,9 +93,13 @@ const searchProvider: SearchProvider = new SearchResolver(
   createLocalSearchProviderOrNull(),
   new BibliaSearchProvider()
 );
-const crossReferenceProvider: CrossReferenceProvider = new HeuristicCrossReferenceProvider(
-  bibleTextProvider,
-  searchProvider
+// Phase 4C-5: CrossReferenceResolver now composes the curated local corpus
+// (Phase 4C-2/4C-3) as the local-first source, falling back to the
+// pre-existing heuristic keyword search (unchanged) — see
+// docs/28_Phase4_Masterplan.md Schritt 4C-4/4C-5.
+const crossReferenceProvider: CrossReferenceProvider = new CrossReferenceResolver(
+  createLocalCrossReferenceProviderOrNull(bibleTextProvider),
+  new HeuristicCrossReferenceProvider(bibleTextProvider, searchProvider)
 );
 const translationProvider: TranslationProvider = new LocalTranslationProvider();
 
@@ -170,9 +190,15 @@ export function createServer(): McpServer {
     },
     async ({ passage, key_terms, bible }) => {
       const result = await crossReferenceProvider.findCrossReferences(passage, key_terms, bible);
-      if (result.results.length === 0) return text(`No cross-references found for ${passage}.`);
+      // Phase 4C-5: additive provenance note (docs/27_Architecture_Review_
+      // und_Strategie_v2.md Teil II Abschnitt 5/6) — the message text before
+      // it is byte-identical to the pre-4C-5 format, nothing is replaced.
+      const sourceLabel = result.source === "local-curated" ? "local cross-reference corpus" : "heuristic keyword search";
+      if (result.results.length === 0) {
+        return text(`No cross-references found for ${passage}. (Source: ${sourceLabel})`);
+      }
       const lines = result.results.map((r) => `**${r.title}**: ${r.preview}`);
-      return text(`Cross-references for **${passage}**:\n\n${lines.join("\n\n")}`);
+      return text(`Cross-references for **${passage}**:\n\n${lines.join("\n\n")}\n\n_Source: ${sourceLabel}_`);
     }
   );
 
