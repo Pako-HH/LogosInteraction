@@ -35,11 +35,6 @@ export interface BibleSearchHit {
   preview: string;
 }
 
-export interface BibliaParseResult {
-  passage: string;
-  passages: string[];
-}
-
 // ─── Logos App Types ─────────────────────────────────────────────────────────
 
 export interface LogosCommandResult {
@@ -158,14 +153,6 @@ export interface CompareResult {
   superset: boolean;
   before: boolean;
   after: boolean;
-}
-
-export interface BibleInfo {
-  bible: string;
-  title: string;
-  abbreviatedTitle: string;
-  languages: string[];
-  publishers: string[];
 }
 
 // ─── MCP Tool Types ──────────────────────────────────────────────────────────

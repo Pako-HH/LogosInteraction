@@ -13,12 +13,14 @@ Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-18, Diagnosesitz
 
 ### P1 — Biblia-API lehnt den konfigurierten Key ab (403) — Key als kompromittiert eingestuft
 
-- **Betrifft:** `get_bible_text`, `get_passage_context`, `search_bible`, `get_cross_references`, `scan_references`, `compare_passages`, `get_available_bibles` (7 von 20 Tools)
+> **Update nach Phase 3 (2026-07-20, siehe [[24_Phase3_Abschlussbericht]], [[22_Phase3D5_BibleTextResolver]], [[23_Phase3D6_LocalSearchProvider]]):** Die ursprüngliche Einstufung „blockiert 7 von 20 Tools vollständig" ist **nicht mehr aktuell**. Seit Phase 3 (`BibleTextResolver`/`SearchResolver`, lokal-first) sind **keine** der ursprünglich betroffenen Tools mehr *zwingend* auf Biblia angewiesen, wenn eine lokal gebündelte Übersetzung (`WEB`, `KJV`, `ASV`) verwendet wird — `scan_references`, `compare_passages` und `get_available_bibles` waren bereits seit Phase 2 vollständig lokal, `get_bible_text`, `get_passage_context`, `search_bible` und `get_cross_references` sind es jetzt zusätzlich, sofern (a) der lokale Korpus gebaut wurde (`npm run build:corpus`, siehe README) und (b) explizit `bible: WEB|KJV|ASV` angefragt wird. **P1 bleibt weiterhin gültig und blockierend** für: jede Anfrage nach `LEB` (dem weiterhin unveränderten Default — Phase-3B-Entscheidung, siehe [[17_Phase3B_Korpus_Produktentscheidungen]]) oder einer anderen nicht lokal gebündelten Übersetzung, sowie für `get_cross_references`-Aufrufe ohne explizit gesetzten `bible`-Parameter (Default bleibt `LEB`). Der unten beschriebene 403-Befund selbst (kompromittierter Key) ist davon unberührt und weiterhin ungelöst — er betrifft nur noch einen kleineren Ausschnitt der Funktionalität als ursprünglich dokumentiert.
+
+- **Betrifft (Stand ursprüngliche Analyse, siehe Update oben):** `get_bible_text`, `get_passage_context`, `search_bible`, `get_cross_references`, `scan_references`, `compare_passages`, `get_available_bibles` (7 von 20 Tools)
 - **Symptom:** Jeder Aufruf liefert `Biblia API error 403: ... Access is denied.` (IIS-Fehlerseite von Faithlife)
 - **Verifiziert:** Direkter `curl`-Test gegen `https://api.biblia.com/v1/bible/content/LEB.txt` bzw. `/find` mit dem in `.mcp.json` hinterlegten Key liefert denselben 403 — unabhängig vom MCP-Server, also kein serverseitiger Bug im Projektcode.
 - **Bestätigter Status:** Der Key gilt als **kompromittiert** und darf nicht weiterverwendet oder neu aktiviert werden. Er ist ungültig zu behandeln, unabhängig von der genauen Ursache der Kompromittierung.
 - **Kein bekanntes Upstream-Issue** dazu — betrifft nur diese lokale Key-Konfiguration, nicht den Projektcode selbst.
-- **Fix:** Neuen Key unter bibliaapi.com beantragen und in `.mcp.json` (gitignored, niemals versionieren) eintragen; alter Key bleibt dauerhaft gesperrt. Siehe [[06_Roadmap]] Schritt 1.2.
+- **Fix:** Neuen Key unter bibliaapi.com beantragen und in `.mcp.json` (gitignored, niemals versionieren) eintragen; alter Key bleibt dauerhaft gesperrt — weiterhin relevant für `LEB`-Anfragen und `get_cross_references` ohne `bible`-Parameter. Siehe [[06_Roadmap]] Schritt 1.2.
 
 ### P2 — Hartcodierter Logos-Datenpfad passt nicht zur lokalen Installation
 

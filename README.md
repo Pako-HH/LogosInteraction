@@ -5,7 +5,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that c
 ## What This Does
 
 - **20 MCP tools** that let Claude read Bible text, search Scripture, navigate Logos, access your notes/highlights/favorites, check reading plans, explore word studies and factbook entries, search your library catalog, open commentaries and lexicons, and run cross-resource searches
-- **16 of the 20 tools work entirely from local data** (your Logos SQLite databases, the local library catalog, and local reference logic) — no external API key required. Only `get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references` depend on the Biblia API for actual Bible text content/full-text search
+- **16 of the 20 tools have never needed any external API key** (your Logos SQLite databases, the local library catalog, and local reference logic)
+- **Local-first Bible text and search**: `get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references` now work entirely offline too, for the **WEB, KJV, and ASV** translations — reading from a local SQLite+FTS5 corpus you can build once (see [Optional: Build the Local Bible Corpus](#optional-build-the-local-bible-corpus)). Without an explicit `bible` parameter, these four tools still default to **LEB** and fall back to the Biblia API for it (LEB is copyrighted, not public domain, so it's never bundled locally) — see [How It Works](#how-it-works)
 - **A Socratic Bible Study agent** that guides you through Scripture using questions (not lectures), welcoming any denominational background, with four questioning layers: Observation, Interpretation, Correlation, and Application
 
 ## Prerequisites
@@ -16,7 +17,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that c
 | **Logos Bible Software** | Installed at `/Applications/Logos.app` (tested with v48) |
 | **Node.js** | v18+ (v23+ recommended for native `fetch` support) |
 | **Claude Code** | Anthropic's CLI tool ([install guide](https://docs.anthropic.com/en/docs/claude-code)) |
-| **Biblia API Key** | Free key from [bibliaapi.com](https://bibliaapi.com/) — only needed for 4 tools (`get_bible_text`, `get_passage_context`, `search_bible`, `get_cross_references`); the other 16 tools work without it |
+| **Biblia API Key** | *Optional.* Free key from [bibliaapi.com](https://bibliaapi.com/) — only needed if you ask `get_bible_text`/`get_passage_context`/`search_bible`/`get_cross_references` for a translation other than WEB/KJV/ASV (including the default, LEB), or if you haven't built the local Bible corpus. The other 16 tools never need it |
 
 ## Setup
 
@@ -36,7 +37,9 @@ npm run build
 cd ..
 ```
 
-### 3. Get a Biblia API key
+### 3. Get a Biblia API key (optional)
+
+Only needed for LEB (the default translation) or any translation other than WEB/KJV/ASV — see [Optional: Build the Local Bible Corpus](#optional-build-the-local-bible-corpus) below for a fully offline alternative covering WEB/KJV/ASV.
 
 1. Go to [bibliaapi.com](https://bibliaapi.com/)
 2. Sign up for a free account
@@ -72,6 +75,27 @@ claude
 
 Once Claude Code starts, type `/mcp` to check that the "logos" server appears with 20 tools.
 
+## Optional: Build the Local Bible Corpus
+
+`get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references` can answer WEB, KJV, and ASV requests entirely offline, from a local SQLite+FTS5 database — no Biblia API key needed for those three translations. This is optional: without it, all four tools still work exactly as before, via the Biblia API (requires a key, see above).
+
+To build it:
+
+1. Download the "BibleWorks (VPL)" plain-text archive for each translation from [eBible.org](https://eBible.org/Scriptures/) (public domain — see [eBible.org's copyright page](https://ebible.org/eng-web/copyright.htm) for WEB):
+   - WEB: `https://eBible.org/Scriptures/eng-web_vpl.zip`
+   - KJV: `https://eBible.org/Scriptures/eng-kjv_vpl.zip`
+   - ASV: `https://eBible.org/Scriptures/eng-asv_vpl.zip`
+2. Unzip each archive and locate the `..._vpl.txt` file inside.
+3. From `logos-mcp-server/`, run the build script once per translation (it accumulates all three into one file):
+   ```bash
+   npx tsx scripts/build-bible-corpus.ts WEB /path/to/eng-web_vpl.txt
+   npx tsx scripts/build-bible-corpus.ts KJV /path/to/eng-kjv_vpl.txt
+   npx tsx scripts/build-bible-corpus.ts ASV /path/to/eng-asv_vpl.txt
+   ```
+4. This writes `logos-mcp-server/data/bible-corpus/bible-corpus.db` (not committed to the repo — it's a local build artifact, like `dist/`). The server picks it up automatically on the next start; no `.mcp.json` changes needed. Override the location with the `LOCAL_BIBLE_CORPUS_PATH` environment variable if you'd rather keep it elsewhere.
+
+If the corpus file is missing or not yet built, the four tools simply behave as they did before this feature existed (Biblia-only) — nothing breaks either way.
+
 ## Available Tools
 
 ### Bible Text & Reading
@@ -79,10 +103,10 @@ Tools for retrieving, reading, and comparing Bible text
 
 | Tool | What it does |
 |------|-------------|
-| `get_bible_text` | Retrieves passage text via the Biblia API (LEB default; also KJV, ASV, DARBY, YLT, WEB) — **requires `BIBLIA_API_KEY`** |
-| `get_passage_context` | Gets a passage with surrounding verses for context — **requires `BIBLIA_API_KEY`** (calls `get_bible_text` internally) |
+| `get_bible_text` | Retrieves passage text. **Local, no API key** for `bible: WEB\|KJV\|ASV` (if the local corpus is built). Falls back to the Biblia API — **requires `BIBLIA_API_KEY`** — for the default (LEB) or any other translation |
+| `get_passage_context` | Gets a passage with surrounding verses for context — same local-first/Biblia-fallback behavior as `get_bible_text` (calls the same resolver internally) |
 | `compare_passages` | Compares two Bible references for overlap, subset, or ordering — pure local reference logic, no API key needed |
-| `get_available_bibles` | Lists Bible translations installed in your local Logos library, read from the local catalog — no API key needed. Note: not every listed translation can be retrieved by `get_bible_text` (Biblia only covers LEB/KJV/ASV/DARBY/YLT/WEB) |
+| `get_available_bibles` | Lists Bible translations installed in your local Logos library, read from the local catalog — no API key needed. Note: this may list more translations than `get_bible_text` can actually retrieve (only WEB/KJV/ASV locally, or LEB/others via Biblia) |
 
 ### Navigation & UI
 Tools that open things in the Logos desktop app
@@ -100,8 +124,8 @@ Tools for searching Bible text and library resources
 
 | Tool | What it does |
 |------|-------------|
-| `search_bible` | Searches Bible text for words, phrases, or topics via the Biblia API — **requires `BIBLIA_API_KEY`** |
-| `get_cross_references` | Finds related passages by extracting key terms — **requires `BIBLIA_API_KEY`** (calls `get_bible_text` and `search_bible` internally) |
+| `search_bible` | Searches Bible text for words or exact phrases. **Local, no API key** for `bible: WEB\|KJV\|ASV` (if the local corpus is built) — multi-word queries match as an exact phrase, not "contains all words anywhere". Falls back to the Biblia API for the default (LEB) or any other translation |
+| `get_cross_references` | Finds related passages by extracting key terms (or using `key_terms` directly) and searching for them — same local-first/Biblia-fallback behavior as `search_bible`, now also accepts an optional `bible` parameter. Without it, defaults to LEB (Biblia) as before |
 | `scan_references` | Finds Bible references embedded in arbitrary text (English and German book names) — local text scanning, no API key needed |
 | `search_all` | Searches across ALL resources in your library (not just Bible text) — opens the search in the Logos UI |
 
@@ -177,15 +201,24 @@ LogosInteraction/
 │   │       ├── biblia-api.ts          # Biblia.com REST API client
 │   │       ├── logos-app.ts           # macOS URL scheme integration
 │   │       ├── sqlite-reader.ts       # Read-only Logos SQLite access
-│   │       └── catalog-reader.ts      # Library catalog search (catalog.db)
+│   │       ├── catalog-reader.ts      # Library catalog search (catalog.db)
+│   │       └── providers/             # Provider abstraction: local-first Bible text/search, Biblia fallback
+│   │           ├── bible-text-provider.ts, search-provider.ts, cross-reference-provider.ts,
+│   │           │   translation-provider.ts        # Interfaces
+│   │           ├── biblia-*.ts, local-*.ts         # Biblia-backed and local (SQLite) implementations
+│   │           └── bible-text-resolver.ts, search-resolver.ts  # Local-first-with-Biblia-fallback composition
+│   ├── scripts/
+│   │   └── build-bible-corpus.ts      # One-time build script: raw VPL text -> local SQLite+FTS5 corpus
+│   ├── data/bible-corpus/             # Build output (not committed — see "Optional: Build the Local Bible Corpus")
 │   └── dist/                          # Built output (after npm run build)
 ```
 
 ## How It Works
 
-The MCP server integrates with Logos through four channels:
+The MCP server integrates with Logos and Bible text through five channels:
 
-- **Biblia API** - Retrieves Bible text and full-text search results via the free REST API from Faithlife (same company as Logos). Used only by `get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references`
+- **Local Bible corpus** - `get_bible_text`, `get_passage_context`, `search_bible`, and `get_cross_references` read from a local SQLite+FTS5 database (built as described above) for the WEB, KJV, and ASV translations — no network access, no API key. A small resolver picks this first and only falls back to Biblia when the requested translation isn't in the local corpus
+- **Biblia API** - Retrieves Bible text and full-text search results via the free REST API from Faithlife (same company as Logos), used as a fallback by the same four tools — for the default translation (LEB, which is copyrighted and never bundled locally) or any translation other than WEB/KJV/ASV
 - **macOS URL schemes** - Opens passages, word studies, and factbook entries directly in the Logos app using `logos4:///` URLs
 - **SQLite databases** - Reads your personal data (notes, highlights, favorites, workflows, reading plans) and library catalog directly from the Logos local database files (read-only access, never modifies your data)
 - **Local reference logic** - `compare_passages` and `scan_references` work entirely offline using built-in reference parsing and a bundled versification table (no Bible text or API access needed)
@@ -219,7 +252,9 @@ Logos generates a unique per-machine install ID for these folders, so no manual 
 
 ## Troubleshooting
 
-**"BIBLIA_API_KEY is not set"** - Make sure your `.mcp.json` has the `env` block with your API key.
+**"BIBLIA_API_KEY is not set"** - Only relevant for LEB (the default) or other non-local translations. Either add the `env` block with your API key to `.mcp.json`, or pass `bible: "WEB"` (or `"KJV"`/`"ASV"`) explicitly and [build the local corpus](#optional-build-the-local-bible-corpus) instead.
+
+**"Local Bible corpus not found"** - You asked for `bible: "WEB"`/`"KJV"`/`"ASV"` but haven't built the local corpus yet — see [Optional: Build the Local Bible Corpus](#optional-build-the-local-bible-corpus). This only affects those three translations; everything else keeps working via Biblia.
 
 **"Database not found"** - Your Logos data path may differ. Run `find ~/Library/Application\ Support/Logos4 -name "*.db" -maxdepth 5` to find your databases and update `LOGOS_DATA_DIR`.
 

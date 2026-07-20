@@ -23,28 +23,32 @@ import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/cat
 
 // Provider imports (Phase A — provider abstraction; see
 // docs/16_MCP2_Zielarchitektur.md). Phase 3D-5: get_bible_text/
-// get_passage_context/get_cross_references now resolve WEB/KJV/ASV from the
+// get_passage_context/get_cross_references resolve WEB/KJV/ASV from the
 // local corpus first (LocalBibleTextProvider), falling back to Biblia only
 // for translations not available locally (e.g. LEB, the default — see
-// docs/22_Phase3D5_BibleTextResolver.md). search_bible is untouched, still
-// Biblia-only (no SearchResolver/LocalSearchProvider yet).
+// docs/22_Phase3D5_BibleTextResolver.md). Phase 3D-6: search_bible follows
+// the same local-first/Biblia-fallback pattern via LocalSearchProvider +
+// SearchResolver — see docs/23_Phase3D6_LocalSearchProvider.md.
 import type { BibleTextProvider } from "./services/providers/bible-text-provider.js";
 import { BibliaBibleTextProvider } from "./services/providers/biblia-bible-text-provider.js";
 import { LocalBibleTextProvider } from "./services/providers/local-bible-text-provider.js";
 import { BibleTextResolver } from "./services/providers/bible-text-resolver.js";
 import type { SearchProvider } from "./services/providers/search-provider.js";
 import { BibliaSearchProvider } from "./services/providers/biblia-search-provider.js";
+import { LocalSearchProvider } from "./services/providers/local-search-provider.js";
+import { SearchResolver } from "./services/providers/search-resolver.js";
 import type { CrossReferenceProvider } from "./services/providers/cross-reference-provider.js";
 import { HeuristicCrossReferenceProvider } from "./services/providers/heuristic-cross-reference-provider.js";
 import type { TranslationProvider } from "./services/providers/translation-provider.js";
 import { LocalTranslationProvider } from "./services/providers/local-translation-provider.js";
 
-// Constructing LocalBibleTextProvider opens the corpus file eagerly and
-// throws if it's missing/corrupt (Phase 3D-4). That's the right behavior
-// for a direct caller, but this instantiation runs at module load time —
-// letting it throw here would prevent the whole server from starting on a
-// machine that hasn't run `npm run build:corpus` yet. Degrade to
-// Biblia-only instead, exactly the pre-3D-5 behavior, rather than crash.
+// Constructing LocalBibleTextProvider/LocalSearchProvider opens the corpus
+// file eagerly and throws if it's missing/corrupt (Phase 3D-4/3D-6).
+// That's the right behavior for a direct caller, but these instantiations
+// run at module load time — letting either throw here would prevent the
+// whole server from starting on a machine that hasn't run
+// `npm run build:corpus` yet. Degrade to Biblia-only instead, exactly the
+// pre-3D-5/3D-6 behavior, rather than crash.
 function createLocalBibleTextProviderOrNull(): LocalBibleTextProvider | null {
   try {
     return new LocalBibleTextProvider();
@@ -55,11 +59,24 @@ function createLocalBibleTextProviderOrNull(): LocalBibleTextProvider | null {
   }
 }
 
+function createLocalSearchProviderOrNull(): LocalSearchProvider | null {
+  try {
+    return new LocalSearchProvider();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`Local Bible search corpus unavailable, falling back to Biblia only: ${msg}`);
+    return null;
+  }
+}
+
 const bibleTextProvider: BibleTextProvider = new BibleTextResolver(
   createLocalBibleTextProviderOrNull(),
   new BibliaBibleTextProvider()
 );
-const searchProvider: SearchProvider = new BibliaSearchProvider();
+const searchProvider: SearchProvider = new SearchResolver(
+  createLocalSearchProviderOrNull(),
+  new BibliaSearchProvider()
+);
 const crossReferenceProvider: CrossReferenceProvider = new HeuristicCrossReferenceProvider(
   bibleTextProvider,
   searchProvider
@@ -149,9 +166,10 @@ export function createServer(): McpServer {
     {
       passage: z.string().describe("Bible reference (e.g., 'Romans 8:28')"),
       key_terms: z.string().optional().describe("Specific terms to search instead of auto-extracting"),
+      bible: z.string().optional().describe("Bible version (default: LEB)"),
     },
-    async ({ passage, key_terms }) => {
-      const result = await crossReferenceProvider.findCrossReferences(passage, key_terms);
+    async ({ passage, key_terms, bible }) => {
+      const result = await crossReferenceProvider.findCrossReferences(passage, key_terms, bible);
       if (result.results.length === 0) return text(`No cross-references found for ${passage}.`);
       const lines = result.results.map((r) => `**${r.title}**: ${r.preview}`);
       return text(`Cross-references for **${passage}**:\n\n${lines.join("\n\n")}`);

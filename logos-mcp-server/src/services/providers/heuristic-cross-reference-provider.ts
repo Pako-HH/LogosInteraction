@@ -25,16 +25,19 @@ export class HeuristicCrossReferenceProvider implements CrossReferenceProvider {
     private readonly search: SearchProvider
   ) {}
 
-  async findCrossReferences(passage: string, keyTerms?: string): Promise<CrossReferenceResult> {
+  async findCrossReferences(passage: string, keyTerms?: string, bible?: string): Promise<CrossReferenceResult> {
+    // Phase 3 close-out (docs/24): resolved once, used for BOTH the
+    // optional text lookup and the search call, so a caller-supplied
+    // translation (e.g. "WEB") actually reaches the local corpus on both
+    // steps — not just one of them. Omitting `bible` preserves the exact
+    // prior behavior (DEFAULT_BIBLE for both steps).
+    const effectiveBible = bible ?? DEFAULT_BIBLE;
+
     let searchQuery: string;
     if (keyTerms) {
       searchQuery = keyTerms;
     } else {
-      // Matches the original inline call `getBibleText(passage)`, which
-      // relied on biblia-api.ts's own `bible: string = DEFAULT_BIBLE`
-      // default parameter — resolved explicitly here since resolveText()
-      // now requires a concrete translation (see bible-text-provider.ts).
-      const passageResult = await this.bibleText.resolveText(passage, DEFAULT_BIBLE);
+      const passageResult = await this.bibleText.resolveText(passage, effectiveBible);
       const words = passageResult.text
         .replace(/[^\w\s]/g, "")
         .split(/\s+/)
@@ -42,7 +45,7 @@ export class HeuristicCrossReferenceProvider implements CrossReferenceProvider {
         .slice(0, 5);
       searchQuery = words.join(" ");
     }
-    const results = await this.search.search(searchQuery, { limit: 15 });
+    const results = await this.search.search(searchQuery, { limit: 15, bible: effectiveBible });
     const filtered = results.results.filter(
       (r) => r.title.toLowerCase() !== passage.toLowerCase()
     );
