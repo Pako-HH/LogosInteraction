@@ -180,3 +180,89 @@ describe("createCorpusDb + insertCorpusVerses", () => {
     db.close();
   });
 });
+
+// Phase 3D-3: building a combined WEB+KJV+ASV corpus means running this
+// pipeline once per translation against the same output file — these
+// tests exercise that exact workflow with small fixtures, mirroring the
+// real multi-translation build without depending on the real ~93,300-verse
+// source data (which, like the WEB source in Phase 3D-2, is intentionally
+// not committed to the repo).
+describe("Phase 3D-3 — combined multi-translation corpus", () => {
+  const webVerses: RawVerse[] = [
+    { book: "Genesis", chapter: 1, verse: 1, text: "In the beginning, God created the heavens and the earth." },
+    { book: "John", chapter: 3, verse: 16, text: "For God so loved the world, that he gave his only born Son..." },
+  ];
+  const kjvVerses: RawVerse[] = [
+    { book: "Genesis", chapter: 1, verse: 1, text: "In the beginning God created the heaven and the earth." },
+    { book: "John", chapter: 3, verse: 16, text: "For God so loved the world, that he gave his only begotten Son..." },
+  ];
+  const asvVerses: RawVerse[] = [
+    { book: "Genesis", chapter: 1, verse: 1, text: "In the beginning God created the heavens and the earth." },
+  ];
+
+  it("accumulates three translations into one file across three separate build runs (same workflow as the real CLI)", () => {
+    const db = createCorpusDb(":memory:");
+    insertCorpusVerses(db, "WEB", webVerses);
+    insertCorpusVerses(db, "KJV", kjvVerses);
+    insertCorpusVerses(db, "ASV", asvVerses);
+
+    const total = db.prepare("SELECT COUNT(*) AS n FROM verses").get() as { n: number };
+    expect(total.n).toBe(5); // 2 + 2 + 1
+
+    const perTranslation = db
+      .prepare("SELECT translation, COUNT(*) AS n FROM verses GROUP BY translation ORDER BY translation")
+      .all() as Array<{ translation: string; n: number }>;
+    expect(perTranslation).toEqual([
+      { translation: "ASV", n: 1 },
+      { translation: "KJV", n: 2 },
+      { translation: "WEB", n: 2 },
+    ]);
+    db.close();
+  });
+
+  it("keeps each translation's own wording independently retrievable for the same reference", () => {
+    const db = createCorpusDb(":memory:");
+    insertCorpusVerses(db, "WEB", webVerses);
+    insertCorpusVerses(db, "KJV", kjvVerses);
+
+    const web = db
+      .prepare("SELECT text FROM verses WHERE translation = 'WEB' AND book = 'John' AND chapter = 3 AND verse = 16")
+      .get() as { text: string };
+    const kjv = db
+      .prepare("SELECT text FROM verses WHERE translation = 'KJV' AND book = 'John' AND chapter = 3 AND verse = 16")
+      .get() as { text: string };
+    expect(web.text).toContain("only born Son");
+    expect(kjv.text).toContain("only begotten Son");
+    db.close();
+  });
+
+  it("FTS5 search can be filtered to a single translation", () => {
+    const db = createCorpusDb(":memory:");
+    insertCorpusVerses(db, "WEB", webVerses);
+    insertCorpusVerses(db, "KJV", kjvVerses);
+
+    const kjvOnly = db
+      .prepare(
+        `SELECT v.translation FROM verses_fts JOIN verses v ON v.id = verses_fts.rowid WHERE verses_fts MATCH 'begotten' AND v.translation = 'KJV'`
+      )
+      .all() as Array<{ translation: string }>;
+    expect(kjvOnly).toEqual([{ translation: "KJV" }]);
+
+    // WEB never says "begotten" in this fixture — searching WEB-only for it must find nothing.
+    const webOnly = db
+      .prepare(
+        `SELECT v.translation FROM verses_fts JOIN verses v ON v.id = verses_fts.rowid WHERE verses_fts MATCH 'begotten' AND v.translation = 'WEB'`
+      )
+      .all();
+    expect(webOnly).toEqual([]);
+  });
+
+  it("rejects an accidental duplicate build run of the same translation (idempotency safety net)", () => {
+    const db = createCorpusDb(":memory:");
+    insertCorpusVerses(db, "KJV", kjvVerses);
+    // Simulates re-running `tsx scripts/build-bible-corpus.ts KJV ...` a
+    // second time against the same output file by mistake.
+    expect(() => insertCorpusVerses(db, "KJV", kjvVerses)).toThrow();
+    db.close();
+  });
+});

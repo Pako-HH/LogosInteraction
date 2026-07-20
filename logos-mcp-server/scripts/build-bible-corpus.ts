@@ -1,4 +1,4 @@
-// Phase 3D-2 — production build pipeline for the local Bible text corpus.
+// Phase 3D-2/3D-3 — production build pipeline for the local Bible text corpus.
 //
 // STATUS: Build-time tooling only (docs/16_MCP2_Zielarchitektur.md §14,
 // "kein Teil des Server-Laufzeitpfads"). Not imported by src/index.ts, not
@@ -11,14 +11,20 @@
 // production-grade: exported, tested, CLI-driven, with a completeness
 // check against the project's existing versification.ts.
 //
-// This script never downloads anything itself — per the Phase 3D-2
-// instruction ("Lade keine neuen Quellen herunter"), the raw VPL file must
-// already exist on disk (e.g. the eng-web_vpl.txt verified in Phase 3D-1)
-// and its path is passed in explicitly.
+// This script never downloads anything itself — the raw VPL file for each
+// translation must already exist on disk (verified via SHA-256 against
+// eBible.org's signed manifest before use, see docs/19/docs/20) and its
+// path is passed in explicitly. Run once per translation against the same
+// output path to build a combined multi-translation corpus (Phase 3D-3).
 //
 // Usage:
-//   tsx scripts/build-bible-corpus.ts <path-to-eng-web_vpl.txt> [outputPath]
-//   WEB_VPL_SOURCE_PATH=<path> tsx scripts/build-bible-corpus.ts
+//   tsx scripts/build-bible-corpus.ts <TRANSLATION_CODE> <path-to-vpl.txt> [outputPath]
+//   BIBLE_TRANSLATION_CODE=<code> VPL_SOURCE_PATH=<path> tsx scripts/build-bible-corpus.ts
+//
+// Example (building the combined WEB+KJV+ASV corpus):
+//   tsx scripts/build-bible-corpus.ts WEB /path/to/eng-web_vpl.txt
+//   tsx scripts/build-bible-corpus.ts KJV /path/to/eng-kjv_vpl.txt
+//   tsx scripts/build-bible-corpus.ts ASV /path/to/eng-asv_vpl.txt
 
 import { fileURLToPath } from "url";
 import { readFileSync, mkdirSync } from "fs";
@@ -191,12 +197,25 @@ export function insertCorpusVerses(db: Database.Database, translation: string, v
 }
 
 // ─── CLI entry point ─────────────────────────────────────────────────────
+//
+// Phase 3D-3: the translation code is now an explicit, required argument
+// (previously hardcoded to "WEB" in Phase 3D-2) — parseVplText(),
+// checkCompleteness(), createCorpusDb(), and insertCorpusVerses() were
+// already translation-agnostic and are unchanged. Re-running this script
+// once per translation against the same output path is additive: the
+// schema uses CREATE TABLE IF NOT EXISTS, and each translation's rows are
+// distinguished by the UNIQUE(translation, book, chapter, verse) key — a
+// single combined corpus file accumulates WEB, KJV, ASV, etc., matching
+// the "eine gebündelte SQLite-Datenbank ... für die gemeinfreien
+// Übersetzungen" design in docs/16_MCP2_Zielarchitektur.md §5.
 
 async function main() {
-  const sourcePath = process.env.WEB_VPL_SOURCE_PATH ?? process.argv[2];
-  if (!sourcePath) {
-    console.error("Usage: tsx scripts/build-bible-corpus.ts <path-to-eng-web_vpl.txt> [outputPath]");
-    console.error("   or: WEB_VPL_SOURCE_PATH=<path> tsx scripts/build-bible-corpus.ts");
+  const translation = process.env.BIBLE_TRANSLATION_CODE ?? process.argv[2];
+  const sourcePath = process.env.VPL_SOURCE_PATH ?? process.argv[3];
+  if (!translation || !sourcePath) {
+    console.error("Usage: tsx scripts/build-bible-corpus.ts <TRANSLATION_CODE> <path-to-vpl.txt> [outputPath]");
+    console.error("   or: BIBLE_TRANSLATION_CODE=<code> VPL_SOURCE_PATH=<path> tsx scripts/build-bible-corpus.ts");
+    console.error("Example: tsx scripts/build-bible-corpus.ts KJV /path/to/eng-kjv_vpl.txt");
     process.exit(1);
   }
 
@@ -204,11 +223,11 @@ async function main() {
 
   const content = readFileSync(sourcePath, "utf-8");
   const verses = parseVplText(content);
-  console.log(`Parsed ${verses.length} canonical verses from ${sourcePath}`);
+  console.log(`Parsed ${verses.length} canonical verses for ${translation} from ${sourcePath}`);
 
   const issues = checkCompleteness(verses);
   if (issues.length > 0) {
-    console.warn(`${issues.length} chapter(s) differ from versification.ts (see docs/19 for the known Romans 14/16 case):`);
+    console.warn(`${issues.length} chapter(s) differ from versification.ts (see docs/19/docs/20 for known translation-specific cases):`);
     for (const issue of issues) {
       console.warn(`  ${issue.book} ${issue.chapter}: expected ${issue.expected}, got ${issue.actual}`);
     }
@@ -217,15 +236,16 @@ async function main() {
   }
 
   const defaultOutputDir = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "bible-corpus");
-  const outputPath = process.argv[3] ?? join(defaultOutputDir, "web.db");
+  const outputPath = process.argv[4] ?? join(defaultOutputDir, "bible-corpus.db");
   mkdirSync(dirname(outputPath), { recursive: true });
 
   const db = createCorpusDb(outputPath);
-  insertCorpusVerses(db, "WEB", verses);
-  const row = db.prepare("SELECT COUNT(*) AS n FROM verses").get() as { n: number };
+  insertCorpusVerses(db, translation, verses);
+  const row = db.prepare("SELECT COUNT(*) AS n FROM verses WHERE translation = ?").get(translation) as { n: number };
+  const total = db.prepare("SELECT COUNT(*) AS n FROM verses").get() as { n: number };
   db.close();
 
-  console.log(`Wrote ${row.n} verses (translation=WEB) to ${outputPath}`);
+  console.log(`Wrote ${row.n} verses (translation=${translation}) to ${outputPath} (${total.n} verses total across all translations in this file)`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
