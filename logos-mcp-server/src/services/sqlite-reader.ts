@@ -7,8 +7,6 @@ import type {
   FavoriteResult,
   WorkflowTemplate,
   WorkflowInstance,
-  ReadingListStatus,
-  ReadingListItem,
   ReadingProgress,
 } from "../types.js";
 
@@ -182,49 +180,24 @@ export function getWorkflowInstances(limit: number = 20): WorkflowInstance[] {
 // ─── Reading Progress ────────────────────────────────────────────────────────
 
 export function getReadingProgress(): ReadingProgress {
-  const db = openDb(DB_PATHS.readingLists);
+  const db = openDb(DB_PATHS.readingProgress);
   try {
-    const statuses = db.prepare(`
-      SELECT Title, Author, Path, Status, ModifiedDate
-      FROM ReadingListStatuses WHERE IsDeleted = 0
+    const rows = db.prepare(`
+      SELECT ResourceId, PercentageRead, Ranges
+      FROM ReadingStatus
     `).all() as Array<{
-      Title: string;
-      Author: string;
-      Path: string;
-      Status: number;
-      ModifiedDate: string | null;
+      ResourceId: string;
+      PercentageRead: number;
+      Ranges: string;
     }>;
-
-    const items = db.prepare(`
-      SELECT ItemId, ReadingListPathNormalized, IsRead, ModifiedDate
-      FROM Items
-    `).all() as Array<{
-      ItemId: string;
-      ReadingListPathNormalized: string;
-      IsRead: number;
-      ModifiedDate: string | null;
-    }>;
-
-    const totalItems = items.length;
-    const completedItems = items.filter((i) => i.IsRead === 1).length;
 
     return {
-      statuses: statuses.map((s) => ({
-        title: s.Title,
-        author: s.Author,
-        path: s.Path,
-        status: s.Status,
-        modifiedDate: s.ModifiedDate,
+      entries: rows.map((r) => ({
+        resourceId: r.ResourceId,
+        percentComplete: Math.round(r.PercentageRead * 100),
+        ranges: r.Ranges,
       })),
-      items: items.map((i) => ({
-        itemId: i.ItemId,
-        readingListPath: i.ReadingListPathNormalized,
-        isRead: i.IsRead === 1,
-        modifiedDate: i.ModifiedDate,
-      })),
-      totalItems,
-      completedItems,
-      percentComplete: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
+      totalResources: rows.length,
     };
   } finally {
     db.close();

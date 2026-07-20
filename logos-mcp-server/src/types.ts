@@ -91,27 +91,15 @@ export interface WorkflowInstance {
   modifiedDate: string | null;
 }
 
-export interface ReadingListItem {
-  itemId: string;
-  readingListPath: string;
-  isRead: boolean;
-  modifiedDate: string | null;
-}
-
-export interface ReadingListStatus {
-  title: string;
-  author: string;
-  path: string;
-  status: number;
-  modifiedDate: string | null;
+export interface ReadingProgressEntry {
+  resourceId: string;
+  percentComplete: number;
+  ranges: string;
 }
 
 export interface ReadingProgress {
-  statuses: ReadingListStatus[];
-  items: ReadingListItem[];
-  totalItems: number;
-  completedItems: number;
-  percentComplete: number;
+  entries: ReadingProgressEntry[];
+  totalResources: number;
 }
 
 // ─── Catalog Types ──────────────────────────────────────────────────────────
