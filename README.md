@@ -96,6 +96,27 @@ To build it:
 
 If the corpus file is missing or not yet built, the four tools simply behave as they did before this feature existed (Biblia-only) — nothing breaks either way.
 
+### Optional: Set a fully local default translation
+
+Tool calls that don't specify a `bible` argument (e.g. plain `get_bible_text` with no translation) use `LEB` by default, which requires a Biblia API key (see [Get a Biblia API key](#3-get-a-biblia-api-key-optional) above). If you've built the local corpus above, you can opt into a fully local, key-free default by setting `DEFAULT_BIBLE` in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "logos": {
+      "command": "node",
+      "args": ["logos-mcp-server/dist/index.js"],
+      "env": {
+        "BIBLIA_API_KEY": "your_api_key_here",
+        "DEFAULT_BIBLE": "WEB"
+      }
+    }
+  }
+}
+```
+
+This only changes the *default* — passing an explicit `bible` argument (e.g. `bible: "LEB"`) always works exactly as before, corpus or not. Leaving `DEFAULT_BIBLE` unset (or empty) keeps the original behavior (`LEB`, via Biblia).
+
 ## Available Tools
 
 ### Bible Text & Reading
