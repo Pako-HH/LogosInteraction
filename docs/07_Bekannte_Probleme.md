@@ -1,6 +1,6 @@
 # 07 — Bekannte Probleme & Risiken
 
-Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-18, Diagnosesitzung Teil 2). Alle Punkte wurden durch Code-Lektüre und/oder Live-Tests der MCP-Tools verifiziert (siehe [[08_Testprotokoll]]), sofern nicht anders vermerkt.
+Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-20, Phase 4D-1: P10 ergänzt). Alle Punkte wurden durch Code-Lektüre und/oder Live-Tests der MCP-Tools verifiziert (siehe [[08_Testprotokoll]]), sofern nicht anders vermerkt.
 
 **Bestätigter Gesamtstatus (2026-07-18):**
 - Claude Code läuft im korrekten Projektordner; der lokale Logos-MCP-Server ist verbunden.
@@ -78,6 +78,15 @@ Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-18, Diagnosesitz
 
 - `origin/feature/phase3-diagnose-qa` liegt 3 Commits hinter `main` zurück und würde bei direktem Merge zwei bereits gemergte Verbesserungen (stripXml/stripRichText-Utilities, Response-Cleanup) zurückrollen.
 - Fix: Rebase vor Merge, siehe [[06_Roadmap]] Schritt 3.1.
+
+### P10 — `get_reading_progress` las die falsche Datenbank — behoben in Phase 4D-1
+
+> **Update Phase 4D-1 (2026-07-20, siehe [[28_Phase4_Masterplan]], [[33_Phase4D1_ReadingProgress_Abschlussbericht]]): Behoben.** `get_reading_progress` liest jetzt `Data/.../ReadingProgressManager/readingprogressmanager.db` (Tabelle `ReadingStatus`: `ResourceId`, `PercentageRead`, `Ranges`) statt der zuvor gelesenen `Documents/.../ReadingLists/ReadingLists.db`. Auf der verifizierten lokalen Installation liefert das Tool jetzt 201 reale Datensätze statt strukturell leerer Ergebnisse.
+
+- **Betrifft:** `get_reading_progress`
+- **Symptom:** Das Tool lieferte auf dieser Installation durchgehend leere/bedeutungslose Ergebnisse (`0/0 items (0%)`), unabhängig vom tatsächlichen Leseverhalten des Nutzers.
+- **Root Cause (verifiziert, siehe [[12_Lokale_Datenquellen_Analyse]] §4):** `get_reading_progress` las `ReadingLists.db` (Leseplan-*Checklisten*, auf der verifizierten Installation 0 Zeilen in beiden Tabellen) statt `readingprogressmanager.db`, das den tatsächlichen, laufend geführten Leseforschritt pro Ressource enthält (201 Zeilen). Kein Zugriffs- oder Pfadfehler im engeren Sinn (die DB war da und lesbar) — die Datenquelle war schlicht die falsche.
+- **Fix:** Neuer `DB_PATHS`-Eintrag `readingProgress` (`LOGOS_CATALOG_DIR`-basiert), `getReadingProgress()` auf die `ReadingStatus`-Tabelle umgestellt, Tool-Antwortformat entsprechend angepasst. Rückgabestruktur geändert von `{statuses, items, totalItems, completedItems, percentComplete}` (Checklisten-Semantik) zu `{entries, totalResources}` (Ressourcen-Fortschritt in Prozent) — kein Kompatibilitäts-Shim, da die alte Struktur eine andere, jetzt nicht mehr zutreffende Bedeutung hatte.
 
 ## Organisatorische Beobachtungen
 
