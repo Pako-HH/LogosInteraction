@@ -265,16 +265,9 @@ export function createServer(): McpServer {
     {},
     async () => {
       const progress = getReadingProgress();
-      const sections: string[] = [];
-      sections.push(`**Overall**: ${progress.completedItems}/${progress.totalItems} items (${progress.percentComplete}%)`);
-      if (progress.statuses.length > 0) {
-        const statusLines = progress.statuses.map((s) => {
-          const label = s.status === 1 ? "Active" : s.status === 2 ? "Completed" : `Status ${s.status}`;
-          return `- **${s.title}** by ${s.author} — ${label}`;
-        });
-        sections.push(`## Reading Plans\n\n${statusLines.join("\n")}`);
-      }
-      return text(sections.join("\n\n"));
+      if (progress.entries.length === 0) return text("No reading progress found.");
+      const lines = progress.entries.map((e) => `- **${e.resourceId}**: ${e.percentComplete}%`);
+      return text(`**Reading Progress**: ${progress.totalResources} resources\n\n${lines.join("\n")}`);
     }
   );
 
