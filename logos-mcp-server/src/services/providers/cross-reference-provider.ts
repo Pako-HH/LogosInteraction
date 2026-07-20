@@ -4,6 +4,15 @@ import type { BibleSearchHit } from "../../types.js";
 export interface CrossReferenceResult {
   passage: string;
   results: BibleSearchHit[];
+  // Phase 4C-4: optional, additive provenance field — which provider
+  // actually answered. Set only by CrossReferenceResolver (cross-reference-
+  // resolver.ts); a caller using a single provider directly (e.g. the
+  // existing HeuristicCrossReferenceProvider on its own) never sets it, so
+  // existing behavior/consumers are byte-identical unless they opt in to
+  // reading this field. See docs/27_Architecture_Review_und_Strategie_v2.md
+  // Teil II Abschnitt 5/6 for the citation/provenance principle this
+  // implements for the first time in code.
+  source?: "local-curated" | "heuristic";
 }
 
 // `bible` added in the Phase 3 close-out (docs/24): previously
