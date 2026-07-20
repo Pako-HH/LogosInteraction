@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
+    "build:corpus": "tsx scripts/build-bible-corpus.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
