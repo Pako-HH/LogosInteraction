@@ -80,6 +80,12 @@ export const LOCAL_BIBLE_CORPUS_PATH =
   process.env.LOCAL_BIBLE_CORPUS_PATH ??
   join(dirname(fileURLToPath(import.meta.url)), "..", "data", "bible-corpus", "bible-corpus.db");
 
+// ─── Local Cross-Reference Corpus (Phase 4C-2 build output) ────────────────
+// Same override/default-resolution pattern as LOCAL_BIBLE_CORPUS_PATH above.
+export const LOCAL_CROSS_REFERENCE_CORPUS_PATH =
+  process.env.LOCAL_CROSS_REFERENCE_CORPUS_PATH ??
+  join(dirname(fileURLToPath(import.meta.url)), "..", "data", "cross-reference-corpus", "cross-reference-corpus.db");
+
 // ─── Logos URL Schemes ───────────────────────────────────────────────────────
 
 export const LOGOS_URL_BASE = "logos4:";
