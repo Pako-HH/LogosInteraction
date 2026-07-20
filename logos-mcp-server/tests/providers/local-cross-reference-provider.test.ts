@@ -8,7 +8,10 @@ import {
   insertCrossReferences,
   type RawCrossReference,
 } from "../../scripts/build-cross-reference-corpus.js";
-import { LocalCrossReferenceProvider } from "../../src/services/providers/local-cross-reference-provider.js";
+import {
+  LocalCrossReferenceProvider,
+  PREVIEW_UNAVAILABLE_TEXT,
+} from "../../src/services/providers/local-cross-reference-provider.js";
 import { DEFAULT_BIBLE } from "../../src/config.js";
 import type { BibleTextProvider } from "../../src/services/providers/bible-text-provider.js";
 
@@ -203,6 +206,50 @@ describe("LocalCrossReferenceProvider", () => {
       try {
         await provider.findCrossReferences("John 3:16");
         expect(bibleText.resolveText).toHaveBeenCalledWith("Romans 5:8", DEFAULT_BIBLE);
+      } finally {
+        provider.close();
+      }
+    });
+  });
+
+  // Regression coverage for the live incident: a curated cross-reference
+  // row must survive even when fetching its preview text fails (e.g.
+  // DEFAULT_BIBLE="LEB" isn't in the local Bible-text corpus and Biblia,
+  // the fallback, rejects the request with a 403 — see docs/28).
+  describe("preview-text failure resilience (bugfix: a failed preview must not drop the hit)", () => {
+    it("keeps a single local hit with the sentinel preview when its text lookup fails", async () => {
+      // Psalms 23:1 has exactly one curated target (Psalms 79:13) in the
+      // fixture corpus; omitting it from the fixture map makes
+      // fakeBibleTextProvider's resolveText throw for that one reference,
+      // simulating a Biblia failure.
+      const bibleText = fakeBibleTextProvider({});
+      const provider = new LocalCrossReferenceProvider(bibleText, buildFixtureCorpus());
+      try {
+        const result = await provider.findCrossReferences("Psalms 23:1");
+        expect(result.results).toEqual([
+          { title: "Psalms 79:13-80:1", preview: PREVIEW_UNAVAILABLE_TEXT },
+        ]);
+      } finally {
+        provider.close();
+      }
+    });
+
+    it("keeps all hits when only one of several preview texts fails, using the sentinel for that one only", async () => {
+      // John 3:16 has 3 curated targets: Romans 5:8, 1 John 4:9, John 10:28.
+      // Only "1 John 4:9" is omitted from the fixture map, so only its
+      // lookup throws — the other two must resolve normally.
+      const bibleText = fakeBibleTextProvider({
+        "Romans 5:8": "For while we were yet sinners, Christ died for us.",
+        "John 10:28": "I give eternal life to them.",
+      });
+      const provider = new LocalCrossReferenceProvider(bibleText, buildFixtureCorpus());
+      try {
+        const result = await provider.findCrossReferences("John 3:16");
+        expect(result.results).toEqual([
+          { title: "Romans 5:8", preview: "For while we were yet sinners, Christ died for us." },
+          { title: "1 John 4:9-10", preview: PREVIEW_UNAVAILABLE_TEXT },
+          { title: "John 10:28", preview: "I give eternal life to them." },
+        ]);
       } finally {
         provider.close();
       }

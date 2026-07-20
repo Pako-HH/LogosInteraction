@@ -51,6 +51,17 @@ function formatCrossReferenceTitle(row: CrossReferenceRow): string {
   return `${row.to_book} ${row.to_chapter}:${row.to_verse}-${row.to_end_book} ${row.to_end_chapter}:${row.to_end_verse}`;
 }
 
+// Bugfix (live incident, Phase 4C): a curated cross-reference row is a hit
+// from the local corpus and stands on its own merit — its preview snippet
+// is a nice-to-have enrichment, not a precondition for the hit to be valid.
+// Before this fix, a single failed preview lookup (e.g. DEFAULT_BIBLE="LEB"
+// isn't in the local Bible-text corpus, so the lookup falls through to
+// Biblia, and Biblia is unreachable or rejects the request) threw out of
+// the whole findCrossReferences() call, discarding every row already read
+// from the corpus. This sentinel lets a per-row failure degrade to a
+// clearly labeled placeholder instead of destroying the result set.
+export const PREVIEW_UNAVAILABLE_TEXT = "(preview unavailable — Bible text lookup failed for this reference)";
+
 // Phase 4C-3: first production LocalCrossReferenceProvider, reading the
 // SQLite corpus built by scripts/build-cross-reference-corpus.ts (Phase
 // 4C-2). Deliberately has NO fallback logic and is NOT wired into index.ts
@@ -131,8 +142,20 @@ export class LocalCrossReferenceProvider implements CrossReferenceProvider {
     for (const row of rows) {
       const title = formatCrossReferenceTitle(row);
       const startVerseRef = `${row.to_book} ${row.to_chapter}:${row.to_verse}`;
-      const text = await this.bibleText.resolveText(startVerseRef, effectiveBible);
-      results.push({ title, preview: text.text });
+      let preview: string;
+      try {
+        const text = await this.bibleText.resolveText(startVerseRef, effectiveBible);
+        preview = text.text;
+      } catch {
+        // Deliberately swallowed per-row: this is the curated corpus's own
+        // hit (`title`), already read from SQLite above — it must survive
+        // even when the enrichment step (fetching the target verse's text)
+        // fails for any reason (unsupported translation, Biblia network
+        // error, Biblia rejecting the request, ...). See
+        // PREVIEW_UNAVAILABLE_TEXT above for the rationale.
+        preview = PREVIEW_UNAVAILABLE_TEXT;
+      }
+      results.push({ title, preview });
     }
 
     return { passage, results };

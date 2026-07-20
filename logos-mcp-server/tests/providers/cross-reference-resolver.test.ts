@@ -1,6 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterAll } from "vitest";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { CrossReferenceResolver } from "../../src/services/providers/cross-reference-resolver.js";
+import {
+  LocalCrossReferenceProvider,
+  PREVIEW_UNAVAILABLE_TEXT,
+} from "../../src/services/providers/local-cross-reference-provider.js";
+import { createCrossReferenceCorpusDb, insertCrossReferences } from "../../scripts/build-cross-reference-corpus.js";
 import type { CrossReferenceProvider, CrossReferenceResult } from "../../src/services/providers/cross-reference-provider.js";
+import type { BibleTextProvider } from "../../src/services/providers/bible-text-provider.js";
 
 function fakeProvider(opts: {
   results?: CrossReferenceResult["results"];
@@ -93,5 +102,65 @@ describe("CrossReferenceResolver", () => {
 
     expect(local.findCrossReferences).toHaveBeenCalledExactlyOnceWith("Romans 8:28", "grace faith", "WEB");
     expect(heuristic.findCrossReferences).toHaveBeenCalledExactlyOnceWith("Romans 8:28", "grace faith", "WEB");
+  });
+});
+
+// Regression coverage for the live incident (John 3:16, DEFAULT_BIBLE="LEB",
+// Biblia unreachable/403): wires a *real* LocalCrossReferenceProvider (with
+// a real, on-disk fixture corpus, same schema as production) into the
+// resolver, so the fix is verified across the module boundary, not just via
+// the resolver's own mocked local.findCrossReferences(). Before the bugfix
+// in local-cross-reference-provider.ts, the preview-text failure below
+// would throw out of the local provider entirely, get swallowed by the
+// resolver's catch block, and incorrectly fall through to heuristic.
+describe("CrossReferenceResolver + real LocalCrossReferenceProvider (preview-text failure must not trigger heuristic fallback)", () => {
+  const testDir = mkdtempSync(join(tmpdir(), "logos-mcp-cross-reference-resolver-preview-failure-"));
+
+  afterAll(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  function buildJohn316Corpus(): string {
+    const dbPath = join(testDir, `corpus-${Math.random().toString(36).slice(2)}.db`);
+    const db = createCrossReferenceCorpusDb(dbPath);
+    insertCrossReferences(db, [
+      {
+        fromBook: "John", fromChapter: 3, fromVerse: 16,
+        toBook: "Romans", toChapter: 5, toVerse: 8,
+        toEndBook: "Romans", toEndChapter: 5, toEndVerse: 8,
+        votes: 977,
+      },
+    ]);
+    db.close();
+    return dbPath;
+  }
+
+  // Simulates the live failure mode: DEFAULT_BIBLE="LEB" is not covered by
+  // the local Bible-text corpus, and the Biblia fallback it would otherwise
+  // use rejects every request (e.g. with a 403), exactly like biblia-api.ts
+  // reports it.
+  function alwaysFailingBibleTextProvider(): BibleTextProvider {
+    return {
+      supports: () => true,
+      resolveText: vi.fn(async () => {
+        throw new Error("Biblia API error 403: Forbidden");
+      }),
+    };
+  }
+
+  it("returns the local-curated hit (with the sentinel preview) and never calls the heuristic fallback", async () => {
+    const local = new LocalCrossReferenceProvider(alwaysFailingBibleTextProvider(), buildJohn316Corpus());
+    const heuristic = fakeProvider({ results: [{ title: "should not be used", preview: "..." }] });
+    const resolver = new CrossReferenceResolver(local, heuristic);
+
+    try {
+      const result = await resolver.findCrossReferences("John 3:16");
+
+      expect(result.source).toBe("local-curated");
+      expect(result.results).toEqual([{ title: "Romans 5:8", preview: PREVIEW_UNAVAILABLE_TEXT }]);
+      expect(heuristic.findCrossReferences).not.toHaveBeenCalled();
+    } finally {
+      local.close();
+    }
   });
 });

@@ -138,16 +138,21 @@ describe("search_bible — local-first resolution via SearchResolver (Phase 3D-6
     }
   });
 
-  it("get_cross_references without an explicit bible still defaults to LEB and goes through Biblia (unchanged)", async () => {
-    // Prior to the Phase 3 close-out (docs/24), get_cross_references had no
-    // `bible` parameter at all and always resolved DEFAULT_BIBLE internally
-    // — this test now confirms that omitting the (newly added) parameter
-    // preserves that exact behavior, byte-for-byte.
-    searchBibleMock.mockResolvedValue({
-      query: "grace faith",
-      resultCount: 1,
-      results: [{ title: "Ephesians 2:8", preview: "For by grace you have been saved through faith." }],
-    });
+  it("get_cross_references without an explicit bible now returns the local-curated corpus with placeholder previews (Phase 4C bugfix)", async () => {
+    // This file doesn't override LOCAL_CROSS_REFERENCE_CORPUS_PATH, so
+    // get_cross_references reaches the real, on-disk production corpus,
+    // which has real curated entries for Romans 8:28. DEFAULT_BIBLE ("LEB")
+    // is not covered by this file's fixture Bible-text corpus (only WEB was
+    // inserted, see top of file), so every preview-text lookup for those
+    // hits falls through to the (here unconfigured) Biblia mock and fails.
+    //
+    // Before the Phase 4C bugfix (local-cross-reference-provider.ts), that
+    // per-row failure discarded the entire local result set and this test
+    // asserted the resulting fallback to heuristic/Biblia search as
+    // "unchanged" behavior. That fallback was itself the bug: real local
+    // curated data was being thrown away. Now the local hits survive with a
+    // placeholder preview, and Biblia's search endpoint is correctly never
+    // consulted at all.
     const { client, server } = await connectedClient();
     try {
       const result = await client.callTool({
@@ -155,7 +160,9 @@ describe("search_bible — local-first resolution via SearchResolver (Phase 3D-6
         arguments: { passage: "Romans 8:28", key_terms: "grace faith" },
       });
       expect(result.isError).toBeFalsy();
-      expect(searchBibleMock).toHaveBeenCalledExactlyOnceWith("grace faith", { limit: 15, bible: "LEB" });
+      const responseText = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(responseText).toContain("_Source: local cross-reference corpus_");
+      expect(searchBibleMock).not.toHaveBeenCalled();
     } finally {
       await client.close();
       await server.close();

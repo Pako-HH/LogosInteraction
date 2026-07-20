@@ -87,6 +87,35 @@ describe("get_cross_references — local-curated resolution via CrossReferenceRe
     }
   });
 
+  // Live-incident regression: DEFAULT_BIBLE is "LEB" (unset in this test
+  // file), which the fixture Bible-text corpus above does not cover (only
+  // "WEB" was inserted) — so every preview-text lookup for this call falls
+  // through to Biblia, and Biblia rejects it (mocked here as a 403, exactly
+  // as api.biblia.com returned in the live incident). Before the bugfix,
+  // this took down the whole call: the local hit was silently discarded and
+  // the heuristic fallback's own Biblia call then threw uncaught. After the
+  // fix, the local-curated hit must survive with a placeholder preview.
+  it("returns the local-curated hit under DEFAULT_BIBLE=LEB even when Biblia is completely unreachable (live incident regression)", async () => {
+    getBibleTextMock.mockRejectedValue(new Error("Biblia API error 403: Forbidden"));
+    const { client, server } = await connectedClient();
+    try {
+      const result = await client.callTool({
+        name: "get_cross_references",
+        arguments: { passage: "John 3:16" },
+      });
+      expect(result.isError).toBeFalsy();
+      const responseText = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(responseText).toContain("_Source: local cross-reference corpus_");
+      expect(responseText).toContain("**Romans 5:8**");
+      expect(responseText).not.toContain("403");
+      expect(searchBibleMock).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+      await server.close();
+      getBibleTextMock.mockReset();
+    }
+  });
+
   it("falls back to the heuristic path, with provenance visible, for a passage the curated corpus doesn't cover", async () => {
     searchBibleMock.mockResolvedValue({
       query: "kind patient",
