@@ -1,6 +1,7 @@
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { readdirSync } from "fs";
+import { fileURLToPath } from "url";
 
 // ─── Logos Data Paths ────────────────────────────────────────────────────────
 
@@ -64,6 +65,15 @@ export const DB_PATHS = {
 export const BIBLIA_API_KEY = process.env.BIBLIA_API_KEY ?? "";
 export const BIBLIA_API_BASE = "https://api.biblia.com/v1/bible";
 export const DEFAULT_BIBLE = "LEB";
+
+// ─── Local Bible Corpus (Phase 3D-2/3D-3 build output) ─────────────────────
+// Default resolves relative to this compiled file's own location (dist/config.js
+// at runtime), so it points at logos-mcp-server/data/bible-corpus/bible-corpus.db
+// regardless of the process's working directory — same pattern already used
+// by scripts/build-bible-corpus.ts for its own default output path.
+export const LOCAL_BIBLE_CORPUS_PATH =
+  process.env.LOCAL_BIBLE_CORPUS_PATH ??
+  join(dirname(fileURLToPath(import.meta.url)), "..", "data", "bible-corpus", "bible-corpus.db");
 
 // ─── Logos URL Schemes ───────────────────────────────────────────────────────
 
