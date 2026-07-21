@@ -22,7 +22,7 @@ vi.mock("../src/config.js", async (importOriginal) => {
   };
 });
 
-const { getInstalledBibles } = await import("../src/services/catalog-reader.js");
+const { getInstalledBibles, getResourceTitles } = await import("../src/services/catalog-reader.js");
 
 const testDir = mkdtempSync(join(tmpdir(), "logos-mcp-catalog-test-"));
 
@@ -256,5 +256,62 @@ describe("getInstalledBibles", () => {
       mockDbPaths.catalog = wrongSchemaPath;
       expect(() => getInstalledBibles()).toThrowError(/unexpected structure/);
     });
+  });
+});
+
+describe("getResourceTitles", () => {
+  function seed() {
+    const catalogPath = freshCatalogPath();
+    mockDbPaths.catalog = catalogPath;
+    createFixtureCatalog(catalogPath, [
+      {
+        ResourceId: "LLS:LEB",
+        Title: "The Lexham English Bible",
+        AbbreviatedTitle: "LEB",
+        Type: "text.monograph.bible",
+        Languages: "en",
+        Publishers: "Lexham Press",
+        Availability: 2,
+        IsDataset: 0,
+      },
+      {
+        ResourceId: "LLS:NEU",
+        Title: "Neue evangelistische Übersetzung",
+        AbbreviatedTitle: "NeÜ",
+        Type: "text.monograph.bible",
+        Languages: "de",
+        Publishers: null,
+        Availability: 2,
+        IsDataset: 0,
+      },
+    ]);
+  }
+
+  it("returns titles for all requested IDs when every ID is found", () => {
+    seed();
+    const titles = getResourceTitles(["LLS:LEB", "LLS:NEU"]);
+    expect(titles.get("LLS:LEB")).toBe("The Lexham English Bible");
+    expect(titles.get("LLS:NEU")).toBe("Neue evangelistische Übersetzung");
+  });
+
+  it("omits IDs with no catalog match instead of throwing", () => {
+    seed();
+    const titles = getResourceTitles(["LLS:LEB", "LLS:DOES-NOT-EXIST"]);
+    expect(titles.get("LLS:LEB")).toBe("The Lexham English Bible");
+    expect(titles.has("LLS:DOES-NOT-EXIST")).toBe(false);
+    expect(titles.size).toBe(1);
+  });
+
+  it("returns an empty map for an empty input array without touching the database", () => {
+    mockDbPaths.catalog = join(testDir, "does-not-exist", "catalog.db");
+    const titles = getResourceTitles([]);
+    expect(titles).toEqual(new Map());
+  });
+
+  it("handles duplicate IDs in the input without error", () => {
+    seed();
+    const titles = getResourceTitles(["LLS:LEB", "LLS:LEB"]);
+    expect(titles.get("LLS:LEB")).toBe("The Lexham English Bible");
+    expect(titles.size).toBe(1);
   });
 });
