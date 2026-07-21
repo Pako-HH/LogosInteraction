@@ -32,8 +32,13 @@ Logos verwaltet in `Documents/.../ResourceCollectionManager/ResourceCollectionMa
 
 `get_resource_collections` liefert Zugriff auf benutzerdefinierte Sammlungen und deren direkt zugeordnete Ressourcen. Auf der verifizierten lokalen Installation waren zum Zeitpunkt der Analyse **0 Sammlungen** angelegt (`ResourceCollections`, `IncludedResources` und alle übrigen Datentabellen leer, Datei zuletzt am 15. Oktober 2025 verändert) — die Korrektheit der Implementierung ist daher ausschließlich über die Fixture-Tests aus 4D-3.3 abgesichert, nicht über reale Bestandsdaten.
 
-## 5. Offene Punkte für Phase 4D-3-Abschluss
+## 5. Validierung
 
-- Build (`npm run build`) und Testsuite (`npm test`) wurden für 4D-3 noch nicht ausgeführt — steht als Qualitätssicherungsschritt vor Zusammenfassung/Push von Phase 4D-3 noch aus.
-- Live-Test gegen den echten, neu gestarteten MCP-Server (analog zur Vorgehensweise bei Phase 4D-1/4D-2) noch nicht durchgeführt. Da die lokale Installation aktuell keine Sammlungen enthält, wird ein Live-Test zunächst nur „keine Sammlungen gefunden" bestätigen können; eine Verifikation gegen echte Mitgliedsdaten erfordert vorab das manuelle Anlegen einer Test-Sammlung in Logos.
-- Kein Push der Commits 4D-3.1–4D-3.5 bisher (auf ausdrücklichen Wunsch je Einzelschritt zurückgehalten).
+- **Build:** `npm run build` erfolgreich, keine Fehler.
+- **Testsuite:** `npm test` — alle **312 Tests** (26 Testdateien) grün, inklusive der 5 neuen `getResourceCollections`-Fixture-Tests aus 4D-3.3.
+- **Live-Test (Claude Desktop):** `get_resource_collections` wurde nach Neustart von Claude Desktop erkannt und ausgeführt.
+  - **Besonderheit dabei:** wie schon bei 4D-2/`get_history` war der zunächst laufende `logos`-Serverprozess in Claude Desktop älter als der Build (Prozessstart 11:28 Uhr, Build 11:41 Uhr) und meldete das neue Tool deshalb zunächst nicht. Erst nach erneutem Neustart von Claude Desktop — wodurch der Serverprozess neu gespawnt wurde und die aktuelle `dist/index.js` lud — war `get_resource_collections` sichtbar und lieferte ein Ergebnis. Bestätigt den bereits in [[34_Phase4D2_History_Abschlussbericht]] festgehaltenen Hinweis: nach jedem Build, der ein neues Tool hinzufügt, muss Claude Desktop neu gestartet werden, bevor ein Live-Test aussagekräftig ist.
+
+## 6. Offene Punkte für Phase 4D-3-Abschluss
+
+- Keine — Build, Tests und Live-Test sind erfolgreich abgeschlossen. Commits 4D-3.1–4D-3.5 sind bereit für Push nach `origin/main` und die Vergabe des Versions-Tags.
