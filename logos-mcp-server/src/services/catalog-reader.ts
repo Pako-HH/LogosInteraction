@@ -282,3 +282,25 @@ export function getInstalledBibles(query?: string): LocalBibleInfo[] {
     db.close();
   }
 }
+
+// ─── Resource Titles (batch lookup) ─────────────────────────────────────────
+
+// Looks up catalog titles for a batch of resource IDs at once (avoids N+1
+// catalog queries when a caller has a list of LLS: IDs to display, e.g. a
+// collection's members). IDs with no matching catalog entry are simply
+// absent from the returned map — callers decide their own fallback.
+export function getResourceTitles(resourceIds: string[]): Map<string, string> {
+  if (resourceIds.length === 0) return new Map();
+
+  const db = openDb(DB_PATHS.catalog);
+  try {
+    const placeholders = resourceIds.map(() => "?").join(",");
+    const rows = db
+      .prepare(`SELECT ResourceId, Title FROM Records WHERE ResourceId IN (${placeholders})`)
+      .all(...resourceIds) as Array<{ ResourceId: string; Title: string }>;
+
+    return new Map(rows.map((r) => [r.ResourceId, r.Title]));
+  } finally {
+    db.close();
+  }
+}
