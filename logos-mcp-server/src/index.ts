@@ -299,9 +299,12 @@ export function createServer(): McpServer {
     async () => {
       const collections = getResourceCollections();
       if (collections.length === 0) return text("No resource collections found.");
-      const lines = collections.map(
-        (c) => `- **${c.title ?? "(untitled)"}**: ${c.resourceIds.length} resource(s)`
-      );
+      const titles = getResourceTitles(collections.flatMap((c) => c.resourceIds));
+      const lines = collections.map((c) => {
+        const header = `- **${c.title ?? "(untitled)"}**: ${c.resourceIds.length} resource(s)`;
+        const memberLines = c.resourceIds.map((id) => `  - ${titles.get(id) ?? id} (${id})`);
+        return memberLines.length > 0 ? `${header}\n${memberLines.join("\n")}` : header;
+      });
       return text(`Found ${collections.length} resource collections:\n\n${lines.join("\n")}`);
     }
   );
