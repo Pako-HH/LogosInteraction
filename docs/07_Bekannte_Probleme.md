@@ -1,6 +1,6 @@
 # 07 — Bekannte Probleme & Risiken
 
-Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-20, Phase 4D-1: P10 ergänzt). Alle Punkte wurden durch Code-Lektüre und/oder Live-Tests der MCP-Tools verifiziert (siehe [[08_Testprotokoll]]), sofern nicht anders vermerkt.
+Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-21, Phase 4H: P2/P6/P7/P8/P9 neu verifiziert). Alle Punkte wurden durch Code-Lektüre und/oder Live-Tests der MCP-Tools verifiziert (siehe [[08_Testprotokoll]]), sofern nicht anders vermerkt.
 
 **Bestätigter Gesamtstatus (2026-07-18):**
 - Claude Code läuft im korrekten Projektordner; der lokale Logos-MCP-Server ist verbunden.
@@ -24,7 +24,9 @@ Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-20, Phase 4D-1: 
 - **Kein bekanntes Upstream-Issue** dazu — betrifft nur diese lokale Key-Konfiguration, nicht den Projektcode selbst.
 - **Fix:** Neuen Key unter bibliaapi.com beantragen und in `.mcp.json` (gitignored, niemals versionieren) eintragen; alter Key bleibt dauerhaft gesperrt — weiterhin relevant für `LEB`-Anfragen und `get_cross_references` ohne `bible`-Parameter. Siehe [[06_Roadmap]] Schritt 1.2.
 
-### P2 — Hartcodierter Logos-Datenpfad passt nicht zur lokalen Installation
+### P2 — Hartcodierter Logos-Datenpfad passt nicht zur lokalen Installation — behoben
+
+> **Update Phase 4H (2026-07-21, siehe [[28_Phase4_Masterplan]]): Behoben, Statuszeile unten war veraltet.** Die als „noch nicht committet" beschriebene `detectLogosInstallDir()`-Funktion ist seit Langem fest committeter Bestandteil von `config.ts` und Grundlage aller `DB_PATHS`-Einträge — auch der in Phase 4D-1 bis 4D-3 neu hinzugekommenen (`readingProgress`, `history`, `resourceCollections`). Live-Verifikation liegt inzwischen mehrfach vor (u. a. `get_reading_progress`: 201 reale Datensätze, `get_history`/`get_resource_collections` über Claude Desktop bestätigt).
 
 - **Betrifft:** `get_user_notes`, `get_user_highlights`, `get_favorites`, `get_reading_progress`, `get_study_workflows`, `get_library_catalog`, `get_resource_types` (7 von 20 Tools)
 - **Symptom:** `Database not found: /Users/.../Logos4/Documents/a3wo155q.w14/...`
@@ -59,22 +61,30 @@ Stand dieser Analyse: 2026-07-18 (zuletzt aktualisiert: 2026-07-20, Phase 4D-1: 
 
 ## Code-Qualitäts-Risiken (kein Laufzeitfehler, aber Wartungsrisiko)
 
-### P6 — Toter, paralleler Code in `src/tools/*.ts`
+### P6 — Toter, paralleler Code in `src/tools/*.ts` — gegenstandslos
+
+> **Update Phase 4H (2026-07-21, siehe [[28_Phase4_Masterplan]]): Gegenstandslos.** Der Ordner `src/tools/` existiert nicht mehr (verifiziert per `ls`/`find` — keine Treffer). Der beschriebene tote Code wurde zwischenzeitlich entfernt, ohne dass dieser Eintrag aktualisiert wurde.
 
 - Sieben Dateien implementieren dieselben 20 Tools in einem anderen Muster, werden aber nirgends importiert (verifiziert per `grep`). Risiko: Ein Entwickler ändert versehentlich die falsche Implementierung und wundert sich, warum sich nichts ändert.
 - Fix: [[06_Roadmap]] Schritt 2.1.
 
-### P7 — Unbenutzte Funktionen `isLogosRunning()`, `searchBibleInLogos()`
+### P7 — Unbenutzte Funktionen `isLogosRunning()`, `searchBibleInLogos()` — gegenstandslos
+
+> **Update Phase 4H (2026-07-21, siehe [[28_Phase4_Masterplan]]): Gegenstandslos.** `logos-app.ts` enthält beide Funktionen nicht mehr (aktueller Inhalt: `navigateToPassage`, `openWordStudy`, `openFactbook`, `openResource`, `openGuide`, `searchAll` — verifiziert per Volllektüre der Datei). Bereits entfernt, ohne dass dieser Eintrag aktualisiert wurde.
 
 - In `logos-app.ts` definiert, nirgends aufgerufen. Geringes Risiko, aber unnötige Wartungslast.
 - Fix: [[06_Roadmap]] Schritt 2.2.
 
-### P8 — Ungetestete Service-Schichten
+### P8 — Ungetestete Service-Schichten — teilweise behoben
+
+> **Update Phase 4H (2026-07-21, siehe [[28_Phase4_Masterplan]]): Teilweise behoben.** `sqlite-reader.ts` (`tests/sqlite-reader.test.ts`, aus Phase 4D-2/4D-3) und `catalog-reader.ts` (`tests/catalog-reader.test.ts`) haben inzwischen Unit-Tests. `biblia-api.ts` und `logos-app.ts` — beide mit externen Seiteneffekten (Netzwerk bzw. Prozessaufruf) — sind weiterhin ungetestet.
 
 - Nur `reference-parser.ts` und `strip-markup.ts` haben Unit-Tests. `biblia-api.ts`, `sqlite-reader.ts`, `catalog-reader.ts`, `logos-app.ts` — also alle Schichten mit externen Seiteneffekten (Netzwerk, Dateisystem, Prozessaufruf) — sind ungetestet.
 - Fix: [[06_Roadmap]] Phase 5.
 
-### P9 — Divergenter, ungemergter Feature-Branch
+### P9 — Divergenter, ungemergter Feature-Branch — gegenstandslos
+
+> **Update Phase 4H (2026-07-21, siehe [[28_Phase4_Masterplan]]): Gegenstandslos.** `git ls-remote --heads origin` liefert für `feature/phase3-diagnose-qa` keinen Treffer mehr — der Branch existiert auf dem aktuellen Remote nicht mehr. Kein Merge-Risiko mehr. (Eine veraltete lokale Remote-Tracking-Referenz kann weiterhin sichtbar sein, spiegelt aber nicht den tatsächlichen Remote-Zustand wider.)
 
 - `origin/feature/phase3-diagnose-qa` liegt 3 Commits hinter `main` zurück und würde bei direktem Merge zwei bereits gemergte Verbesserungen (stripXml/stripRichText-Utilities, Response-Cleanup) zurückrollen.
 - Fix: Rebase vor Merge, siehe [[06_Roadmap]] Schritt 3.1.
