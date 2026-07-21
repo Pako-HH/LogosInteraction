@@ -66,6 +66,9 @@ export const DB_PATHS = {
   // Phase 4D-2: lives under Data/ (LOGOS_CATALOG_DIR), like `catalog` and
   // `readingProgress` above.
   history: join(LOGOS_CATALOG_DIR, "HistoryManager", "history.db"),
+  // Phase 4D-3: lives under Documents/ (LOGOS_DATA_DIR), unlike `history`
+  // and `readingProgress` above.
+  resourceCollections: join(LOGOS_DATA_DIR, "ResourceCollectionManager", "ResourceCollectionManager.db"),
 } as const;
 
 // ─── Biblia API ──────────────────────────────────────────────────────────────
