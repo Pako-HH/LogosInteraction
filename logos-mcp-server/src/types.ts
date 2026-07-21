@@ -102,6 +102,13 @@ export interface ReadingProgress {
   totalResources: number;
 }
 
+export interface HistoryEntry {
+  id: string;
+  title: string;
+  subtitle: string;
+  lastVisited: string;
+}
+
 // ─── Catalog Types ──────────────────────────────────────────────────────────
 
 export interface CatalogResource {

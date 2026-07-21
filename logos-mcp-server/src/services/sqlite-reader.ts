@@ -8,6 +8,7 @@ import type {
   WorkflowTemplate,
   WorkflowInstance,
   ReadingProgress,
+  HistoryEntry,
 } from "../types.js";
 
 function openDb(path: string): Database.Database {
@@ -199,6 +200,41 @@ export function getReadingProgress(): ReadingProgress {
       })),
       totalResources: rows.length,
     };
+  } finally {
+    db.close();
+  }
+}
+
+// ─── History ─────────────────────────────────────────────────────────────────
+
+export function getHistory(limit?: number): HistoryEntry[] {
+  const db = openDb(DB_PATHS.history);
+  try {
+    let sql = `
+      SELECT Id, Title, Subtitle, LastVisited
+      FROM History
+      WHERE IsDeleted = 0
+      ORDER BY LastVisited DESC
+    `;
+    const params: unknown[] = [];
+    if (limit) {
+      sql += " LIMIT ?";
+      params.push(limit);
+    }
+
+    const rows = db.prepare(sql).all(...params) as Array<{
+      Id: string;
+      Title: string;
+      Subtitle: string;
+      LastVisited: string;
+    }>;
+
+    return rows.map((r) => ({
+      id: r.Id,
+      title: r.Title,
+      subtitle: r.Subtitle,
+      lastVisited: r.LastVisited,
+    }));
   } finally {
     db.close();
   }
