@@ -19,6 +19,7 @@ import {
   getReadingProgress,
   getUserNotes,
   getHistory,
+  getResourceCollections,
 } from "./services/sqlite-reader.js";
 import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
 
@@ -284,6 +285,21 @@ export function createServer(): McpServer {
       if (history.length === 0) return text("No history found.");
       const lines = history.map((h) => `- **${h.title}** — ${h.subtitle} (${h.lastVisited})`);
       return text(`Found ${history.length} history entries:\n\n${lines.join("\n")}`);
+    }
+  );
+
+  // ── 9b. get_resource_collections ─────────────────────────────────────────
+  server.tool(
+    "get_resource_collections",
+    "List the user's resource collections in Logos (manually included resources only; does not resolve smart/query-based or nested collection membership)",
+    {},
+    async () => {
+      const collections = getResourceCollections();
+      if (collections.length === 0) return text("No resource collections found.");
+      const lines = collections.map(
+        (c) => `- **${c.title ?? "(untitled)"}**: ${c.resourceIds.length} resource(s)`
+      );
+      return text(`Found ${collections.length} resource collections:\n\n${lines.join("\n")}`);
     }
   );
 
