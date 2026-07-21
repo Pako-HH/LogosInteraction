@@ -155,20 +155,3 @@ export interface CompareResult {
   before: boolean;
   after: boolean;
 }
-
-// ─── MCP Tool Types ──────────────────────────────────────────────────────────
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  handler: (args: Record<string, unknown>) => Promise<ToolResult>;
-}
-
-export interface ToolResult {
-  content: Array<{
-    type: "text";
-    text: string;
-  }>;
-  isError?: boolean;
-}
