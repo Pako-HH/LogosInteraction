@@ -21,7 +21,7 @@ import {
   getHistory,
   getResourceCollections,
 } from "./services/sqlite-reader.js";
-import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
+import { searchCatalog, getResourceTypeSummary, typeLabel, getResourceTitles } from "./services/catalog-reader.js";
 
 // Provider imports (Phase A — provider abstraction; see
 // docs/16_MCP2_Zielarchitektur.md). Phase 3D-5: get_bible_text/
@@ -268,7 +268,10 @@ export function createServer(): McpServer {
     async () => {
       const progress = getReadingProgress();
       if (progress.entries.length === 0) return text("No reading progress found.");
-      const lines = progress.entries.map((e) => `- **${e.resourceId}**: ${e.percentComplete}%`);
+      const titles = getResourceTitles(progress.entries.map((e) => e.resourceId));
+      const lines = progress.entries.map(
+        (e) => `- **${titles.get(e.resourceId) ?? e.resourceId}** (${e.resourceId}): ${e.percentComplete}%`
+      );
       return text(`**Reading Progress**: ${progress.totalResources} resources\n\n${lines.join("\n")}`);
     }
   );
