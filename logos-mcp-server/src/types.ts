@@ -109,6 +109,12 @@ export interface HistoryEntry {
   lastVisited: string;
 }
 
+export interface ResourceCollection {
+  id: string;
+  title: string | null;
+  resourceIds: string[];
+}
+
 // ─── Catalog Types ──────────────────────────────────────────────────────────
 
 export interface CatalogResource {

@@ -9,6 +9,7 @@ import type {
   WorkflowInstance,
   ReadingProgress,
   HistoryEntry,
+  ResourceCollection,
 } from "../types.js";
 
 function openDb(path: string): Database.Database {
@@ -234,6 +235,35 @@ export function getHistory(limit?: number): HistoryEntry[] {
       title: r.Title,
       subtitle: r.Subtitle,
       lastVisited: r.LastVisited,
+    }));
+  } finally {
+    db.close();
+  }
+}
+
+// ─── Resource Collections ─────────────────────────────────────────────────────
+
+export function getResourceCollections(): ResourceCollection[] {
+  const db = openDb(DB_PATHS.resourceCollections);
+  try {
+    const collections = db.prepare(`
+      SELECT ResourceCollectionId, Title
+      FROM ResourceCollections
+      WHERE IsDeleted = 0
+    `).all() as Array<{ ResourceCollectionId: string; Title: string | null }>;
+
+    const includedResources = db.prepare(`
+      SELECT IncludedResourceId
+      FROM IncludedResources
+      WHERE ResourceCollectionId = ?
+    `);
+
+    return collections.map((c) => ({
+      id: c.ResourceCollectionId,
+      title: c.Title,
+      resourceIds: (
+        includedResources.all(c.ResourceCollectionId) as Array<{ IncludedResourceId: string }>
+      ).map((r) => r.IncludedResourceId),
     }));
   } finally {
     db.close();
