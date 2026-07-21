@@ -18,6 +18,7 @@ import {
   getWorkflowInstances,
   getReadingProgress,
   getUserNotes,
+  getHistory,
 } from "./services/sqlite-reader.js";
 import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
 
@@ -268,6 +269,21 @@ export function createServer(): McpServer {
       if (progress.entries.length === 0) return text("No reading progress found.");
       const lines = progress.entries.map((e) => `- **${e.resourceId}**: ${e.percentComplete}%`);
       return text(`**Reading Progress**: ${progress.totalResources} resources\n\n${lines.join("\n")}`);
+    }
+  );
+
+  // ── 9a. get_history ───────────────────────────────────────────────────────
+  server.tool(
+    "get_history",
+    "Show the user's recently visited places in Logos",
+    {
+      limit: z.number().optional().describe("Max history entries to return (default: 20)"),
+    },
+    async ({ limit }) => {
+      const history = getHistory(limit ?? 20);
+      if (history.length === 0) return text("No history found.");
+      const lines = history.map((h) => `- **${h.title}** — ${h.subtitle} (${h.lastVisited})`);
+      return text(`Found ${history.length} history entries:\n\n${lines.join("\n")}`);
     }
   );
 
